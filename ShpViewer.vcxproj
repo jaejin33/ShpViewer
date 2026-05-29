@@ -195,6 +195,7 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="App\InspectorView.h" />
     <ClInclude Include="ClassView.h" />
     <ClInclude Include="FileView.h" />
     <ClInclude Include="framework.h" />
@@ -227,6 +228,7 @@
     <ClInclude Include="App\ViewTree.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="App\InspectorView.cpp" />
     <ClCompile Include="ClassView.cpp" />
     <ClCompile Include="FileView.cpp" />
     <ClCompile Include="App\MainFrm.cpp" />

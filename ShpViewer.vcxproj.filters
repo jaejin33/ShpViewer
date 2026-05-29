@@ -94,6 +94,9 @@
     <ClInclude Include="Render\BoxRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
+    <ClInclude Include="App\InspectorView.h">
+      <Filter>App</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="App\ShpViewerView.cpp">
@@ -140,6 +143,9 @@
     </ClCompile>
     <ClCompile Include="Render\BoxRenderer.cpp">
       <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="App\InspectorView.cpp">
+      <Filter>App</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

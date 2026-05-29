@@ -7,6 +7,7 @@
 #include "ClassView.h"
 #include "OutputWnd.h"
 #include "PropertiesWnd.h"
+#include "InspectorView.h"
 
 class CMainFrame : public CFrameWndEx
 {
@@ -17,7 +18,7 @@ protected: // serialization에서만 만들어집니다.
 
 // 특성입니다.
 public:
-
+	CSplitterWnd      m_splitter;
 // 작업입니다.
 public:
 
@@ -29,6 +30,9 @@ public:
 // 구현입니다.
 public:
 	virtual ~CMainFrame();
+	CInspectorView* GetInspectorView() {
+		return (CInspectorView*)m_splitter.GetPane(0, 0);
+	}
 #ifdef _DEBUG
 	virtual void AssertValid() const;
 	virtual void Dump(CDumpContext& dc) const;
@@ -56,6 +60,7 @@ protected:
 
 	BOOL CreateDockingWindows();
 	void SetDockingWindowIcons(BOOL bHiColorIcons);
+	virtual BOOL OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext) override;
 };
 
 

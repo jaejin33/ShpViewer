@@ -5,6 +5,11 @@
 #include "pch.h"
 #include "framework.h"
 #include "ShpViewer.h"
+#include "ShpViewerDoc.h"
+#include "Renderer.h"    
+#include "Camera.h"
+#include "InspectorView.h"
+#include "ShpViewerView.h"
 
 #include "MainFrm.h"
 
@@ -255,4 +260,29 @@ void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 {
 	CFrameWndEx::OnSettingChange(uFlags, lpszSection);
 	m_wndOutput.UpdateFonts();
+}
+
+BOOL CMainFrame::OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext)
+{
+	// 1행 2열 스플리터
+	if (!m_splitter.CreateStatic(this, 1, 2))
+		return FALSE;
+
+	// 왼쪽: 인스펙터 (너비 220px 고정)
+	if (!m_splitter.CreateView(0, 0,
+		RUNTIME_CLASS(CInspectorView),
+		CSize(220, 0), pContext))
+		return FALSE;
+
+	// 오른쪽: OpenGL 뷰
+	if (!m_splitter.CreateView(0, 1,
+		RUNTIME_CLASS(CShpViewerView),
+		CSize(0, 0), pContext))
+		return FALSE;
+
+	// 왼쪽 패널 너비 고정 (드래그로 못 바꾸게)
+	m_splitter.SetColumnInfo(0, 220, 220);
+	m_splitter.SetColumnInfo(1, 100, 50);
+
+	return TRUE;
 }
