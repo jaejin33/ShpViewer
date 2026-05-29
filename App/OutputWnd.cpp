@@ -1,7 +1,7 @@
 ﻿
 #include "pch.h"
 #include "framework.h"
-
+#include <algorithm>
 #include "OutputWnd.h"
 #include "Resource.h"
 #include "MainFrm.h"
@@ -98,7 +98,8 @@ void COutputWnd::AdjustHorzScroll(CListBox& wndListBox)
 		CString strItem;
 		wndListBox.GetText(i, strItem);
 
-		cxExtentMax = max(cxExtentMax, (int)dc.GetTextExtent(strItem).cx);
+		int cx = (int)dc.GetTextExtent(strItem).cx;
+		if (cx > cxExtentMax) cxExtentMax = cx;
 	}
 
 	wndListBox.SetHorizontalExtent(cxExtentMax);

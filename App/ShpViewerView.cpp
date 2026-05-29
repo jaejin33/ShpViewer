@@ -1,6 +1,8 @@
 // ShpViewerView.cpp
 
 #include "pch.h"
+#include "MainFrm.h"
+#include "InspectorView.h"
 #include "framework.h"
 #ifndef SHARED_HANDLERS
 #include "ShpViewer.h"
@@ -107,7 +109,7 @@ int CShpViewerView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     m_camera   = std::make_shared<Render::Camera>(1.0f);
     m_renderer->SetCamera(m_camera);
     m_renderer->Initialize();
-
+    SetTimer(3, 16, NULL);
     return 0;
 }
 
@@ -118,6 +120,7 @@ void CShpViewerView::OnDestroy()
     if (m_eglContext != EGL_NO_CONTEXT) eglDestroyContext(m_eglDisplay, m_eglContext);
     if (m_eglSurface != EGL_NO_SURFACE) eglDestroySurface(m_eglDisplay, m_eglSurface);
     if (m_eglDisplay != EGL_NO_DISPLAY) eglTerminate(m_eglDisplay);
+    KillTimer(3);
     CView::OnDestroy();
 }
 
@@ -133,7 +136,7 @@ void CShpViewerView::OnDraw(CDC* pDC)
     // FPS 갱신: 이전 프레임과의 간격으로 순간 FPS 계산 후 EMA 평활화
     ULONGLONG now = GetTickCount64();
     if (m_lastFrameTick != 0) {
-        ULONGLONG dt = now - m_lastFrameTick;
+        float dt = (float)(now - m_lastFrameTick);
         if (dt > 0) {
             float instant = 1000.0f / (float)dt;
             // 첫 프레임은 그냥 대입, 이후는 EMA (가중치 0.15)
@@ -156,7 +159,21 @@ void CShpViewerView::OnDraw(CDC* pDC)
 
     eglSwapBuffers(m_eglDisplay, m_eglSurface); // GL 백버퍼 -> 화면
 
-    DrawInspectorOverlay(); // GDI 오버레이 (텍스트 + 버튼)
+    CMainFrame* pFrame = (CMainFrame*)AfxGetMainWnd();
+    if (pFrame) {
+        CInspectorView* pInsp = pFrame->GetInspectorView();
+        if (pInsp) {
+            pInsp->m_fps = m_fps;
+            pInsp->m_totalCount = m_totalCount;
+            pInsp->m_renderingCount = m_renderingCount;
+            pInsp->m_minObjectSize = m_minObjectSize;
+            pInsp->m_showLevelColors = m_showLevelColors;
+            pInsp->m_showItemMBR = m_showItemMBR;
+            pInsp->m_showNodeMBR = m_showNodeMBR;
+            pInsp->m_showFrustum = m_showFrustum;
+            pInsp->Refresh();  // ← 인스펙터 재그리기
+        }
+    }
 }
 
 // WM_SIZE: 화면 크기 변경 시 카메라 종횡비 업데이트
@@ -221,9 +238,14 @@ void CShpViewerView::OnPaint()
 //   타이머 ID=2 : 마우스 휠 정지 후 약간의 지연을 두고 UpdateVisibleItems 호출
 void CShpViewerView::OnTimer(UINT_PTR nIDEvent)
 {
-    if (nIDEvent == 2) {
+    switch (nIDEvent) {
+    case 2:  // 기존 휠/키 디바운스
         KillTimer(2);
-        UpdateVisibleItems(); // 휠 멈춘 후 한 번만 재업로드
+        UpdateVisibleItems();
+        break;
+    case 3:  // ← 추가: FPS 갱신용
+        Invalidate(FALSE);
+        break;
     }
     CView::OnTimer(nIDEvent);
 }
@@ -440,6 +462,42 @@ void CShpViewerView::UpdateVisibleItems()
     }
 
     Invalidate(FALSE);
+
+    CMainFrame* pFrame = (CMainFrame*)AfxGetMainWnd();
+    if (pFrame) {
+        CInspectorView* pInsp = (CInspectorView*)
+            pFrame->m_splitter.GetPane(0, 0);
+        if (pInsp) {
+            pInsp->m_totalCount = m_totalCount;
+            pInsp->m_renderingCount = m_renderingCount;
+            pInsp->m_minObjectSize = m_minObjectSize;
+            pInsp->m_fps = m_fps;
+            pInsp->m_showLevelColors = m_showLevelColors;
+            pInsp->m_showItemMBR = m_showItemMBR;
+            pInsp->m_showNodeMBR = m_showNodeMBR;
+            pInsp->m_showFrustum = m_showFrustum;
+
+            pInsp->m_onButtonClick = [this](int idx) {
+                switch (idx) {
+                case 0: m_showLevelColors = !m_showLevelColors; break;
+                case 1:
+                    m_showItemMBR = !m_showItemMBR;
+                    m_renderer->SetShowItemMBR(m_showItemMBR);
+                    break;
+                case 2:
+                    m_showNodeMBR = !m_showNodeMBR;
+                    m_renderer->SetShowNodeMBR(m_showNodeMBR);
+                    break;
+                case 3:
+                    m_showFrustum = !m_showFrustum;
+                    m_renderer->SetShowFrustum(m_showFrustum);
+                    break;
+                }
+                UpdateVisibleItems();
+            };
+            pInsp->Refresh();
+        }
+    }
 }
 
 // 키 누름 이벤트 처리
