@@ -1,0 +1,29 @@
+# Visual Studio 임시 폴더 및 빌드 결과물 무시
+.vs/
+Debug/
+Release/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# 사용자 종속 파일 및 캐시 무시
+*.user
+*.suo
+*.dbmdl
+*.aps
+*.pch
+*.vspscc
+*.vssscc
+*.ncb
+*.sdf
+*.opensdf
+*.ipch
+
+# 빌드 로그 및 디버깅 심볼 무시
+*.tlog
+*.log
+*.idb
+*.pdb
+*.ilk

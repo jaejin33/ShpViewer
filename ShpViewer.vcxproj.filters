@@ -1,0 +1,232 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="App">
+      <UniqueIdentifier>{583a7ccd-6265-4a07-9375-db0cd6ff6098}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="GeoData">
+      <UniqueIdentifier>{1b2a3155-5daa-4bc8-8633-a88c01eb9ee5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ShpIO">
+      <UniqueIdentifier>{e43d7bb3-7768-49f9-ad7e-0d70a7dfa2cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Spatial">
+      <UniqueIdentifier>{e8a90c35-d28d-4247-8eb0-51b677664175}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render">
+      <UniqueIdentifier>{7013e226-00d9-4e67-84ed-c8c0eb87a0ec}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="App\ShpViewerView.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App\ShpViewerDoc.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App\MainFrm.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="ClassView.h" />
+    <ClInclude Include="FileView.h" />
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="App\OutputWnd.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="App\PropertiesWnd.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="App\ViewTree.h" />
+    <ClInclude Include="App\ShpViewer.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="GeoData\BoundingBox.h">
+      <Filter>GeoData</Filter>
+    </ClInclude>
+    <ClInclude Include="GeoData\IGeometry.h">
+      <Filter>GeoData</Filter>
+    </ClInclude>
+    <ClInclude Include="GeoData\PointShape.h">
+      <Filter>GeoData</Filter>
+    </ClInclude>
+    <ClInclude Include="GeoData\PolylineShape.h">
+      <Filter>GeoData</Filter>
+    </ClInclude>
+    <ClInclude Include="GeoData\PolygonShape.h">
+      <Filter>GeoData</Filter>
+    </ClInclude>
+    <ClInclude Include="ShpIO\ShpParser.h">
+      <Filter>ShpIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Spatial\QuadNode.h">
+      <Filter>Spatial</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Camera.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Renderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\PointRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\PolylineRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\PolygonRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Shader.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Spatial\QuadTree.h">
+      <Filter>Spatial</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\LevelColors.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\FrustumRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\BoxRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="App\ShpViewerView.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="App\ShpViewerDoc.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="App\MainFrm.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="ClassView.cpp" />
+    <ClCompile Include="FileView.cpp" />
+    <ClCompile Include="App\OutputWnd.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="App\PropertiesWnd.cpp" />
+    <ClCompile Include="App\ViewTree.cpp" />
+    <ClCompile Include="App\ShpViewer.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="ShpIO\ShpParser.cpp">
+      <Filter>ShpIO</Filter>
+    </ClCompile>
+    <ClCompile Include="Spatial\QuadNode.cpp">
+      <Filter>Spatial</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Camera.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\PolygonRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Shader.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Render.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Spatial\QuadTree.cpp">
+      <Filter>Spatial</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\FrustumRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\BoxRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ShpViewer.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\file_view.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\file_view_hc.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\class_view.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\class_view_hc.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\fileview.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\fileview_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\classview.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\classview_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\explorer.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\explorer_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\sort.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\sort_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\menuimages.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\menuimages_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\output_wnd.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\output_wnd_hc.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\properties_wnd.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\properties_wnd_hc.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\properties.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\properties_hc.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\userimages.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\ShpViewerDoc.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\ShpViewer.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Toolbar.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Toolbar256.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\ShpViewer.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+  </ItemGroup>
+</Project>
