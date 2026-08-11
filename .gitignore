@@ -1,0 +1,23 @@
+cat > .gitignore << 'EOF'
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+ipch/
+
+# 빌드 산출물
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+Win32/
+bin/
+obj/
+
+# vcpkg (manifest 모드 결과물 — vcpkg.json은 남기고 이건 제외)
+vcpkg_installed/
+EOF
