@@ -195,7 +195,9 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="GLView.h" />
+    <ClInclude Include="math\Mat4.h" />
+    <ClInclude Include="math\Vec3.h" />
+    <ClInclude Include="render\GLView.h" />
     <ClInclude Include="ClassView.h" />
     <ClInclude Include="FileView.h" />
     <ClInclude Include="framework.h" />
@@ -211,7 +213,7 @@
     <ClInclude Include="ViewTree.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GLView.cpp" />
+    <ClCompile Include="render\GLView.cpp" />
     <ClCompile Include="ClassView.cpp" />
     <ClCompile Include="FileView.cpp" />
     <ClCompile Include="MainFrm.cpp" />

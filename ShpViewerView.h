@@ -3,7 +3,7 @@
 //
 
 #pragma once
-#include "GLView.h"
+#include "render/GLView.h"
 
 class CShpViewerView : public CView
 {
