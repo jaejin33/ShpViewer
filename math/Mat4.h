@@ -60,7 +60,7 @@ inline Mat4 Mat4RotateY(float radians) {
 	return result;
 }
 
-inline Mat4 Mat4LookAt(const Vec3& eye, const Vec3& target, const Vec3 up)
+inline Mat4 Mat4LookAt(const Vec3& eye, const Vec3& target, const Vec3& up)
 {
 	Vec3 zaxis = Vec3Normalize(eye - target);
 	Vec3 xaxis = Vec3Normalize(Vec3Cross(up, zaxis));
