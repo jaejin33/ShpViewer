@@ -16,6 +16,7 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+#include <parse/ShpDataset.h>
 
 
 // CShpViewerView
@@ -32,6 +33,34 @@ BEGIN_MESSAGE_MAP(CShpViewerView, CView)
 	ON_WM_CREATE()
 	ON_WM_SIZE()
 END_MESSAGE_MAP()
+
+struct QuadTreeStats {
+	int32_t total_node_count = 0;
+	int32_t leaf_node_count = 0;
+	int32_t max_depth_reached = 0;
+	int32_t total_object_count = 0;
+};
+
+void CollectQuadTreeStats(const QuadTreeNode* node, int32_t depth, QuadTreeStats* out_stats) {
+	out_stats->total_node_count++;
+	out_stats->total_object_count += static_cast<int32_t>(node->object_indices.size());
+
+	if (depth > out_stats->max_depth_reached) {
+		out_stats->max_depth_reached = depth;
+	}
+
+	bool is_leaf = true;
+	for (const std::unique_ptr<QuadTreeNode>& child : node->children) {
+		if (child) {
+			is_leaf = false;
+			CollectQuadTreeStats(child.get(), depth + 1, out_stats);
+		}
+	}
+
+	if (is_leaf) {
+		out_stats->leaf_node_count++;
+	}
+}
 
 // CShpViewerView 생성/소멸
 
@@ -68,6 +97,17 @@ void CShpViewerView::OnDraw(CDC* /*pDC*/)
 
 // CShpViewerView 인쇄
 
+void CShpViewerView::OnInitialUpdate() {
+	CView::OnInitialUpdate();
+
+	ShpDataset dataset;
+	bool success = BuildShpDataset("C:\\Users\\egis\\Desktop\\F_FAC_BUILDING_26_202505.shp", &dataset);
+	if (!success) {
+		return;
+	}
+	QuadTreeStats stats;
+	CollectQuadTreeStats(dataset.quad_tree.get(), 0, &stats);
+}
 
 void CShpViewerView::OnFilePrintPreview()
 {
@@ -151,3 +191,4 @@ void CShpViewerView::OnSize(UINT nType, int cx, int cy)
 	if (::IsWindow(m_glView.GetSafeHwnd()))  // OnCreate가 끝나기전에 실행될 수 있어서 안전장치 역할을 함
 		m_glView.MoveWindow(0, 0, cx, cy);
 }
+

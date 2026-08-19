@@ -26,7 +26,7 @@ protected:
 	virtual BOOL OnPreparePrinting(CPrintInfo* pInfo);
 	virtual void OnBeginPrinting(CDC* pDC, CPrintInfo* pInfo);
 	virtual void OnEndPrinting(CDC* pDC, CPrintInfo* pInfo);
-
+	virtual void OnInitialUpdate();
 // 구현입니다.
 public:
 	virtual ~CShpViewerView();

@@ -1,4 +1,4 @@
-#pragma once		//두 번이상 include 되는 것을 막는 헤더 가드
+﻿#pragma once		//두 번이상 include 되는 것을 막는 헤더 가드
 #include <cmath>	// std::sqrt
 
 struct Vec3
