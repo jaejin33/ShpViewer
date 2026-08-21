@@ -199,6 +199,7 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="camera\Camera.h" />
     <ClInclude Include="math\Mat4.h" />
     <ClInclude Include="math\Vec3.h" />
     <ClInclude Include="parse\QuadTree.h" />
@@ -221,6 +222,7 @@
     <ClInclude Include="ViewTree.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="camera\Camera.cpp" />
     <ClCompile Include="parse\QuadTree.cpp" />
     <ClCompile Include="parse\ShpDataset.cpp" />
     <ClCompile Include="parse\ShpParser.cpp" />

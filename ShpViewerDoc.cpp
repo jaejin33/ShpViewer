@@ -136,3 +136,18 @@ void CShpViewerDoc::Dump(CDumpContext& dc) const
 
 
 // CShpViewerDoc 명령
+
+BOOL CShpViewerDoc::OnOpenDocument(LPCTSTR lpszPathName)
+{
+	if (!CDocument::OnOpenDocument(lpszPathName))
+		return FALSE;
+
+	CStringA path_ansi(lpszPathName);
+	std::string path(path_ansi.GetString());
+	
+	if (!BuildShpDataset(path, &m_dataset)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}

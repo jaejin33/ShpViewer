@@ -4,7 +4,7 @@
 
 
 #pragma once
-
+#include "parse/ShpDataset.h"
 
 class CShpViewerDoc : public CDocument
 {
@@ -14,6 +14,7 @@ protected: // serialization에서만 만들어집니다.
 
 // 특성입니다.
 public:
+	ShpDataset m_dataset;
 
 // 작업입니다.
 public:
@@ -21,6 +22,7 @@ public:
 // 재정의입니다.
 public:
 	virtual BOOL OnNewDocument();
+	virtual BOOL OnOpenDocument(LPCTSTR lpszPathName);
 	virtual void Serialize(CArchive& ar);
 #ifdef SHARED_HANDLERS
 	virtual void InitializeSearchContent();

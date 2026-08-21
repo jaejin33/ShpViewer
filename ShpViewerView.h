@@ -4,6 +4,7 @@
 
 #pragma once
 #include "render/GLView.h"
+#include "ShpViewerDoc.h"
 
 class CShpViewerView : public CView
 {
@@ -27,6 +28,7 @@ protected:
 	virtual void OnBeginPrinting(CDC* pDC, CPrintInfo* pInfo);
 	virtual void OnEndPrinting(CDC* pDC, CPrintInfo* pInfo);
 	virtual void OnInitialUpdate();
+	virtual void OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*pHint*/);
 // 구현입니다.
 public:
 	virtual ~CShpViewerView();

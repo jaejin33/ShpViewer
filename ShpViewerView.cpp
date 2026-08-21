@@ -100,13 +100,13 @@ void CShpViewerView::OnDraw(CDC* /*pDC*/)
 void CShpViewerView::OnInitialUpdate() {
 	CView::OnInitialUpdate();
 
-	ShpDataset dataset;
-	bool success = BuildShpDataset("C:\\Users\\egis\\Desktop\\F_FAC_BUILDING_26_202505.shp", &dataset);
-	if (!success) {
-		return;
-	}
-	QuadTreeStats stats;
-	CollectQuadTreeStats(dataset.quad_tree.get(), 0, &stats);
+	//ShpDataset dataset;
+	//bool success = BuildShpDataset("C:\\Users\\egis\\Desktop\\F_FAC_BUILDING_26_202505.shp", &dataset);
+	//if (!success) {
+	//	return;
+	//}
+	//QuadTreeStats stats;
+	//CollectQuadTreeStats(dataset.quad_tree.get(), 0, &stats);
 }
 
 void CShpViewerView::OnFilePrintPreview()
@@ -192,3 +192,12 @@ void CShpViewerView::OnSize(UINT nType, int cx, int cy)
 		m_glView.MoveWindow(0, 0, cx, cy);
 }
 
+
+void CShpViewerView::OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*pHint*/)
+{
+	CShpViewerDoc* pDoc = GetDocument();
+	if (pDoc) {
+		m_glView.SetDataset(&pDoc->m_dataset);
+	}
+	m_glView.Invalidate();
+}
