@@ -2,19 +2,23 @@
 #include <afxwin.h>
 #include <cstdint>
 
-class CInspectorWnd : public CWnd {
-public :
-	CInspectorWnd();
-	virtual ~CInspectorWnd();
+class CInspectorWnd : public CWnd
+{
+public:
+    CInspectorWnd();
+    virtual ~CInspectorWnd();
 
-	BOOL Create(CWnd* parent_wnd);
-	void UpdateStats(int32_t visible_count, int32_t total_count);
+    BOOL Create(CWnd* parent_wnd);
+    void UpdateStats(int32_t visible_count, int32_t total_count);
 
 protected:
-	CStatic m_wndStatsLabel;
+    int32_t m_visibleCount = 0;
+    int32_t m_totalCount = 0;
 
-	DECLARE_MESSAGE_MAP()
-	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
-	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
-	afx_msg void OnSize(UINT nType, int cx, int cy);
+    void DrawSection(CDC* dc, int& y, LPCTSTR title, COLORREF color, int width, CFont* font);
+    void DrawRow(CDC* dc, int& y, LPCTSTR label, const CString& value, COLORREF value_color, int width);
+
+    DECLARE_MESSAGE_MAP()
+    afx_msg void OnPaint();
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 };
