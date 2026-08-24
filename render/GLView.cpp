@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "GLView.h"
+#include "../MainFrm.h"
+#include "../ShpViewerView.h"
 
 IMPLEMENT_DYNAMIC(CGLView, CWnd)
 
@@ -118,6 +120,8 @@ void CGLView::Render()
 {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    int32_t visible_count = 0;
     
     if (m_shaderProgram != 0 && !m_drawRanges.empty()) {
         glUseProgram(m_shaderProgram);
@@ -137,9 +141,24 @@ void CGLView::Render()
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
 
-        for (const DrawRange& range : m_drawRanges) {
-            glDrawArrays(GL_LINE_LOOP, range.first, range.count);
+        std::array<Plane, 6> planes = ExtractFrustumPlane(mvp);
+
+        for (const RecordRange& record_range : m_recordRanges) {
+            if (!IsBoxInsideFrustum(planes, record_range.bounds_min, record_range.bounds_max)) {
+                continue;
+            }
+
+            ++visible_count;
+
+            int32_t end_index = record_range.first_range_index + record_range.range_count;
+            for (int32_t k = record_range.first_range_index; k < end_index; ++k) {
+                const DrawRange& range = m_drawRanges[k];
+                glDrawArrays(GL_LINE_LOOP, range.first, range.count);
+            }
         }
+    }
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->UpdateInspector(visible_count, static_cast<int32_t>(m_recordRanges.size()));
     }
 
     eglSwapBuffers(m_eglDisplay, m_eglSurface);
@@ -158,15 +177,21 @@ void CGLView::SetDataset(const ShpDataset* dataset) {
 
 void CGLView::BuildDebugGeometry() {
     m_drawRanges.clear();
+    m_recordRanges.clear();
     if (!m_pDataset) return;
 
     std::vector<Vec3> vertices;
-    const int32_t kMaxRecordsForSanityCheck = 100;
+    const int32_t kMaxRecordsForSanityCheck = 1000;
     int32_t record_count = (std::min)(kMaxRecordsForSanityCheck, static_cast<int32_t>(m_pDataset->records.size()));
 
     for (int32_t i = 0; i < record_count; ++i) {
         const ShpPolygonRecord& record = m_pDataset->records[i];
         int32_t part_count = static_cast<int32_t>(record.part_start_indices.size());
+
+        RecordRange record_range;
+        record_range.first_range_index = static_cast<int32_t>(m_drawRanges.size());
+        record_range.bounds_min = record.bounds_min;
+        record_range.bounds_max = record.bounds_max;
 
         for (int32_t p = 0; p < part_count; ++p) {
             int32_t start = record.part_start_indices[p];
@@ -183,6 +208,9 @@ void CGLView::BuildDebugGeometry() {
                 vertices.push_back(record.points[k]);
             }
         }
+
+        record_range.range_count = static_cast<int32_t>(m_drawRanges.size()) - record_range.first_range_index;
+        m_recordRanges.push_back(record_range);
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);

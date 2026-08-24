@@ -18,7 +18,9 @@
 #endif
 #include <parse/ShpDataset.h>
 
-
+namespace {
+	constexpr int kInspectorWidth = 220;
+}
 // CShpViewerView
 
 IMPLEMENT_DYNCREATE(CShpViewerView, CView)
@@ -174,11 +176,17 @@ int CShpViewerView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	if (CView::OnCreate(lpCreateStruct) == -1)
 		return -1;
 
-	// TODO:  여기에 특수화된 작성 코드를 추가합니다.
 	CRect rc;
 	GetClientRect(&rc);
-	m_glView.Create(nullptr, _T("Shp Viewer"), WS_CHILD | WS_VISIBLE, rc, this, 1001);
+
+	int gl_width = (rc.Width() > kInspectorWidth) ? (rc.Width() - kInspectorWidth) : rc.Width();
+
+	m_glView.Create(nullptr, _T("Shp Viewer"), WS_CHILD | WS_VISIBLE,
+		CRect(0, 0, gl_width, rc.Height()), this, 1001);
 	m_glView.InitEGL();
+
+	m_inspector.Create(this);
+	m_inspector.MoveWindow(gl_width, 0, kInspectorWidth, rc.Height());
 
 	return 0;
 }
@@ -187,9 +195,13 @@ void CShpViewerView::OnSize(UINT nType, int cx, int cy)
 {
 	CView::OnSize(nType, cx, cy);
 
-	// TODO: 여기에 메시지 처리기 코드를 추가합니다.
-	if (::IsWindow(m_glView.GetSafeHwnd()))  // OnCreate가 끝나기전에 실행될 수 있어서 안전장치 역할을 함
-		m_glView.MoveWindow(0, 0, cx, cy);
+	int gl_width = (cx > kInspectorWidth) ? (cx - kInspectorWidth) : cx;
+
+	if (::IsWindow(m_glView.GetSafeHwnd()))
+		m_glView.MoveWindow(0, 0, gl_width, cy);
+
+	if (::IsWindow(m_inspector.GetSafeHwnd()))
+		m_inspector.MoveWindow(gl_width, 0, kInspectorWidth, cy);
 }
 
 
@@ -200,4 +212,8 @@ void CShpViewerView::OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*p
 		m_glView.SetDataset(&pDoc->m_dataset);
 	}
 	m_glView.Invalidate();
+}
+
+void CShpViewerView::UpdateInspector(int32_t visible_count, int32_t total_count) {
+	m_inspector.UpdateStats(visible_count, total_count);
 }

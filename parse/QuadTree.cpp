@@ -117,3 +117,25 @@ std::unique_ptr<QuadTreeNode> BuildQuadTree(const QuadBounds& world_bounds) {
 
 	return root_node;
 }
+
+void QueryVisibleObjects(const QuadTreeNode* node, const std::array<Plane, 6>& planes, std::vector<int32_t>* out_visible_indices) {
+	
+	if (node == nullptr) {
+		return;
+	}
+
+	Vec3 loose_min(node->loose_bounds.min_x, 0.0f, node->loose_bounds.min_z);
+	Vec3 loose_max(node->loose_bounds.max_x, 0.0f, node->loose_bounds.max_z);
+
+	if (!IsBoxInsideFrustum(planes, loose_min, loose_max)) {
+		return;
+	}
+
+	for (int32_t object_index : node->object_indices) {
+		out_visible_indices->push_back(object_index);
+	}
+
+	for (const std::unique_ptr<QuadTreeNode>& child : node->children) {
+		QueryVisibleObjects(child.get(), planes, out_visible_indices);
+	}
+}

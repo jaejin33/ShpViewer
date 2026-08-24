@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include "../culling/Frustum.h"
 
 enum class QuadChildIndex : int32_t {
 	kTopLeft = 0,
@@ -49,3 +50,5 @@ void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& ob
 
 // world_bounds를 루트 tight_bounds로 하는 새 트리를 만들어서 루트노드 반환
 std::unique_ptr<QuadTreeNode> BuildQuadTree(const QuadBounds& world_bounds);
+
+void QueryVisibleObjects(const QuadTreeNode* node, const std::array<Plane, 6>& planes, std::vector<int32_t>* out_visible_indices);

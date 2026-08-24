@@ -4,6 +4,7 @@
 
 #pragma once
 #include "render/GLView.h"
+#include "render/InspectorWnd.h"
 #include "ShpViewerDoc.h"
 
 class CShpViewerView : public CView
@@ -16,8 +17,10 @@ protected: // serialization에서만 만들어집니다.
 public:
 	CShpViewerDoc* GetDocument() const;
 	CGLView m_glView;
+	CInspectorWnd m_inspector;
 // 작업입니다.
 public:
+	void UpdateInspector(int32_t visible_count, int32_t total_count);
 
 // 재정의입니다.
 public:

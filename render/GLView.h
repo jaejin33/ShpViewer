@@ -15,6 +15,13 @@ class CGLView :
         GLsizei count;
     };
 
+    struct RecordRange {
+        int32_t first_range_index = 0;
+        int32_t range_count = 0;
+        Vec3 bounds_min;
+        Vec3 bounds_max;
+    };
+
 public:
     CGLView();
     virtual ~CGLView();
@@ -35,6 +42,7 @@ protected:
 
     int m_clientWidth = 0;
     int m_clientHeight = 0;
+    std::vector<RecordRange> m_recordRanges;
 
     const ShpDataset* m_pDataset = nullptr;
     GLuint m_shaderProgram = 0;

@@ -236,6 +236,22 @@ void CPropertiesWnd::InitPropList()
 
 	pGroup4->Expand(FALSE);
 	m_wndPropList.AddProperty(pGroup4);
+
+	CMFCPropertyGridProperty* pGroupCulling = new CMFCPropertyGridProperty(_T("컬링 확인"));
+
+	m_pVisibleCountProp = new CMFCPropertyGridProperty(
+		_T("렌더링 중 객체 수"), (_variant_t)0l,
+		_T("이번 프레임에 프러스텀 컬링을 통과해서 실제로 그려진 레코드 수."));
+	m_pVisibleCountProp->Enable(FALSE);
+	pGroupCulling->AddSubItem(m_pVisibleCountProp);
+
+	m_pTotalCountProp = new CMFCPropertyGridProperty(
+		_T("로드된 객체 수"), (_variant_t)0l,
+		_T("현재 VBO에 올라간 전체 레코드 수(컬링 여부와 무관)."));
+	m_pTotalCountProp->Enable(FALSE);
+	pGroupCulling->AddSubItem(m_pTotalCountProp);
+
+	m_wndPropList.AddProperty(pGroupCulling);
 }
 
 void CPropertiesWnd::OnSetFocus(CWnd* pOldWnd)
@@ -270,4 +286,13 @@ void CPropertiesWnd::SetPropListFont()
 
 	m_wndPropList.SetFont(&m_fntPropList);
 	m_wndObjectCombo.SetFont(&m_fntPropList);
+}
+
+void CPropertiesWnd::UpdateRenderStats(int32_t visible_count, int32_t total_count) {
+	if (m_pVisibleCountProp != nullptr) {
+		m_pVisibleCountProp->SetValue((_variant_t)(long)visible_count);
+	}
+	if (m_pTotalCountProp != nullptr) {
+		m_pTotalCountProp->SetValue((_variant_t)(long)total_count);
+	}
 }

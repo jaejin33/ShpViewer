@@ -20,7 +20,7 @@ public:
 
 // 작업입니다.
 public:
-
+	void UpdateRenderStats(int32_t visible_count, int32_t total_count);
 // 재정의입니다.
 public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);

@@ -406,3 +406,7 @@ void CMainFrame::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 	CFrameWndEx::OnSettingChange(uFlags, lpszSection);
 	m_wndOutput.UpdateFonts();
 }
+
+void CMainFrame::UpdateRenderStats(int32_t visible_count, int32_t total_count) {
+	m_wndProperties.UpdateRenderStats(visible_count, total_count);
+}

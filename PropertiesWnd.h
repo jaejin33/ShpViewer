@@ -19,6 +19,7 @@ public:
 	CPropertiesWnd() noexcept;
 
 	void AdjustLayout();
+	void UpdateRenderStats(int32_t visible_count, int32_t total_count);
 
 // 특성입니다.
 public:
@@ -33,6 +34,8 @@ protected:
 	CComboBox m_wndObjectCombo;
 	CPropertiesToolBar m_wndToolBar;
 	CMFCPropertyGridCtrl m_wndPropList;
+	CMFCPropertyGridProperty* m_pVisibleCountProp = nullptr;
+	CMFCPropertyGridProperty* m_pTotalCountProp = nullptr;
 
 // 구현입니다.
 public:
