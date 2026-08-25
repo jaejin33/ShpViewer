@@ -27,8 +27,13 @@ struct QuadTreeNode {
 	std::array<std::unique_ptr<QuadTreeNode>, 4> children;
 };
 
+struct NodeDebugInfo {
+	QuadBounds bounds;
+	int32_t depth = 0;
+};
+
 constexpr float kDefaultLoosenessFactor = 2.0f;
-constexpr int32_t kMaxQuadTreeDepth = 9;
+constexpr int32_t kMaxQuadTreeDepth = 13;
 
 // tight_bounds 중심점 기준으로 (center_x, center_z)가 4분면 중 몇 번인지 반환.
 QuadChildIndex SelectChildIndex(const QuadBounds& tight_bounds, float center_x, float center_z);
@@ -51,4 +56,19 @@ void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& ob
 // world_bounds를 루트 tight_bounds로 하는 새 트리를 만들어서 루트노드 반환
 std::unique_ptr<QuadTreeNode> BuildQuadTree(const QuadBounds& world_bounds);
 
-void QueryVisibleObjects(const QuadTreeNode* node, const std::array<Plane, 6>& planes, std::vector<int32_t>* out_visible_indices);
+void QueryVisibleObjects(
+	const QuadTreeNode* node,
+	const std::array<Plane, 6>& planes,
+	const Vec3& camera_eye,
+	float max_draw_distance_squared,
+	float min_size_to_distance_ratio_squared,
+	std::vector<int32_t>* out_visible_indices,
+	std::vector<int32_t>* out_object_depths = nullptr,
+	std::vector<NodeDebugInfo>* out_visible_nodes = nullptr,
+	int32_t depth = 0);
+
+// 컬링 여부와 무관하게 트리 전체를 수집
+void CollectAllQuadTreeNodes(
+	const QuadTreeNode* node,
+	int32_t depth,
+	std::vector<NodeDebugInfo>* out_nodes);

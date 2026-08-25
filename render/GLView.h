@@ -30,6 +30,9 @@ public:
     void Render();
     void Cleanup();
     void SetDataset(const ShpDataset* dataset);
+    void SetShowQuadTreeLevels(bool show);
+    void SetShowAllNodes(bool show);
+    void SetShowAllObjectLevelColors(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -49,8 +52,14 @@ protected:
     GLuint m_vertexBuffer = 0;
     std::vector<DrawRange> m_drawRanges;
 
+    bool m_showAllObjectLevelColors = false;
+    bool m_showAllNodes = false;
+    bool m_showQuadTreeLevels = false;
+    GLuint m_nodeBoxVertexBuffer = 0;
+
     bool InitShader();
     void BuildDebugGeometry();
+    void RenderQuadTreeLevels(const std::vector<NodeDebugInfo>& nodes);
 
     DECLARE_MESSAGE_MAP()
     afx_msg void OnPaint();
@@ -63,4 +72,5 @@ public:
     afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
     afx_msg void OnMouseMove(UINT nFlags, CPoint point);
     afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
+    afx_msg void OnContextMenu(CWnd* /*pWnd*/, CPoint /*point*/);
 };

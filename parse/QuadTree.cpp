@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "QuadTree.h"
+#include <algorithm>
 
 void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& object_bounds, int32_t depth) {
 	if (depth >= kMaxQuadTreeDepth) {
@@ -118,7 +119,16 @@ std::unique_ptr<QuadTreeNode> BuildQuadTree(const QuadBounds& world_bounds) {
 	return root_node;
 }
 
-void QueryVisibleObjects(const QuadTreeNode* node, const std::array<Plane, 6>& planes, std::vector<int32_t>* out_visible_indices) {
+void QueryVisibleObjects(
+	const QuadTreeNode* node,
+	const std::array<Plane, 6>& planes,
+	const Vec3& camera_eye, 
+	float max_draw_distance_squared,
+	float min_size_to_distance_ratio_squared,
+	std::vector<int32_t>* out_visible_indices,
+	std::vector<int32_t>* out_object_depths,
+	std::vector<NodeDebugInfo>* out_visible_nodes,
+	int32_t depth) {
 	
 	if (node == nullptr) {
 		return;
@@ -130,12 +140,53 @@ void QueryVisibleObjects(const QuadTreeNode* node, const std::array<Plane, 6>& p
 	if (!IsBoxInsideFrustum(planes, loose_min, loose_max)) {
 		return;
 	}
+	
+	float closest_x = std::clamp(camera_eye.x, node->loose_bounds.min_x, node->loose_bounds.max_x);
+	float closest_z = std::clamp(camera_eye.z, node->loose_bounds.min_z, node->loose_bounds.max_z);
+	Vec3 closest_point(closest_x, 0.0f, closest_z);
+	float distance_sq = Vec3LengthSquared(closest_point - camera_eye);
+
+	if (distance_sq > max_draw_distance_squared) {
+		return;  // 이 노드 전체가 draw distance 밖 -> 서브트리 통째로 스킵
+	}
+
+	float node_width = node->loose_bounds.max_x - node->loose_bounds.min_x;
+	float node_depth = node->loose_bounds.max_z - node->loose_bounds.min_z;
+	float node_size_sq = node_width * node_depth;
+
+	if (node_size_sq < min_size_to_distance_ratio_squared * distance_sq) {
+		return;   // 이 영역 자체가 화면에서 너무 작음 -> 서브트리 스킵
+	}
+
+
+	if (out_visible_nodes != nullptr) {
+		out_visible_nodes->push_back({ node->tight_bounds, depth });
+	}
 
 	for (int32_t object_index : node->object_indices) {
 		out_visible_indices->push_back(object_index);
+		if (out_object_depths != nullptr) {
+			out_object_depths->push_back(depth);
+		}
 	}
 
 	for (const std::unique_ptr<QuadTreeNode>& child : node->children) {
-		QueryVisibleObjects(child.get(), planes, out_visible_indices);
+		QueryVisibleObjects(child.get(), planes, camera_eye, max_draw_distance_squared, min_size_to_distance_ratio_squared, out_visible_indices, out_object_depths, out_visible_nodes, depth + 1);
+	}
+}
+
+void CollectAllQuadTreeNodes(
+	const QuadTreeNode* node,
+	int32_t depth,
+	std::vector<NodeDebugInfo>* out_nodes) {
+
+	if (node == nullptr) {
+		return;
+	}
+
+	out_nodes->push_back({ node->tight_bounds, depth });
+
+	for (const std::unique_ptr<QuadTreeNode>& child : node->children) {
+		CollectAllQuadTreeNodes(child.get(), depth + 1, out_nodes);
 	}
 }

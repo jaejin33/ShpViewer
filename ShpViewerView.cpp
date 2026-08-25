@@ -41,11 +41,21 @@ struct QuadTreeStats {
 	int32_t leaf_node_count = 0;
 	int32_t max_depth_reached = 0;
 	int32_t total_object_count = 0;
+	int32_t objects_per_depth[kMaxQuadTreeDepth + 1] = {};
 };
 
 void CollectQuadTreeStats(const QuadTreeNode* node, int32_t depth, QuadTreeStats* out_stats) {
+	if (node == nullptr) {
+		return;
+	}
+
 	out_stats->total_node_count++;
-	out_stats->total_object_count += static_cast<int32_t>(node->object_indices.size());
+
+	int32_t object_count_here = static_cast<int32_t>(node->object_indices.size());
+	out_stats->total_object_count += object_count_here;
+	if (depth <= kMaxQuadTreeDepth) {
+		out_stats->objects_per_depth[depth] += object_count_here;   // 추가
+	}
 
 	if (depth > out_stats->max_depth_reached) {
 		out_stats->max_depth_reached = depth;
@@ -210,10 +220,38 @@ void CShpViewerView::OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*p
 	CShpViewerDoc* pDoc = GetDocument();
 	if (pDoc) {
 		m_glView.SetDataset(&pDoc->m_dataset);
+		
+		if (pDoc->m_dataset.quad_tree) {
+			QuadTreeStats stats;
+			CollectQuadTreeStats(pDoc->m_dataset.quad_tree.get(), 0, &stats);
+
+			CString summary_msg;
+			summary_msg.Format(_T("total_nodes=%d, leaf_nodes=%d, max_depth_reached=%d, total_objects=%d\n"),
+				stats.total_node_count, stats.leaf_node_count, stats.max_depth_reached, stats.total_object_count);
+			OutputDebugString(summary_msg);
+
+			for (int32_t d = 0; d <= kMaxQuadTreeDepth; ++d) {
+				CString depth_msg;
+				depth_msg.Format(_T("  depth %d: %d objects\n"), d, stats.objects_per_depth[d]);
+				OutputDebugString(depth_msg);
+			}
+		}
 	}
 	m_glView.Invalidate();
 }
 
 void CShpViewerView::UpdateInspector(int32_t visible_count, int32_t total_count) {
 	m_inspector.UpdateStats(visible_count, total_count);
+}
+
+void CShpViewerView::SetShowQuadTreeLevels(bool show) {
+	m_glView.SetShowQuadTreeLevels(show);
+}
+
+void CShpViewerView::SetShowAllNodes(bool show) {
+	m_glView.SetShowAllNodes(show);
+}
+
+void CShpViewerView::SetShowAllObjectLevelColors(bool show) {
+	m_glView.SetShowAllObjectLevelColors(show);
 }

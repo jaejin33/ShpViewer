@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "InspectorWnd.h"
+#include "../ShpViewerView.h"
 
 namespace {
     constexpr COLORREF kColorBackground = RGB(18, 24, 38);
@@ -17,11 +18,33 @@ CInspectorWnd::~CInspectorWnd() {}
 BEGIN_MESSAGE_MAP(CInspectorWnd, CWnd)
     ON_WM_PAINT()
     ON_WM_ERASEBKGND()
+    ON_BN_CLICKED(kToggleQuadTreeButtonId, &CInspectorWnd::OnToggleQuadTreeClicked)
+    ON_BN_CLICKED(kToggleAllNodesButtonId, &CInspectorWnd::OnToggleAllNodesClicked)
+    ON_BN_CLICKED(kToggleObjectColorButtonId, &CInspectorWnd::OnToggleObjectColorClicked)
 END_MESSAGE_MAP()
 
 BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
-    return CWnd::Create(nullptr, _T(""), WS_CHILD | WS_VISIBLE,
-        CRect(0, 0, 0, 0), parent_wnd, 0);
+    if (!CWnd::Create(nullptr, _T(""), WS_CHILD | WS_VISIBLE,
+        CRect(0, 0, 0, 0), parent_wnd, 0)) {
+        return FALSE;
+    }
+
+    m_toggleQuadTreeButton.Create(
+        _T("레벨 표시: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 220, 210, 250),
+        this,
+        kToggleQuadTreeButtonId);
+
+    m_toggleAllNodesButton.Create(_T("전체 노드 보기: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 260, 210, 290), this, kToggleAllNodesButtonId);
+
+    m_toggleObjectColorButton.Create(_T("객체 레벨 색상: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 300, 210, 330), this, kToggleObjectColorButtonId);
+
+    return TRUE;
 }
 
 BOOL CInspectorWnd::OnEraseBkgnd(CDC* /*pDC*/) {
@@ -97,12 +120,6 @@ void CInspectorWnd::OnPaint() {
     text.Format(_T("%d"), culled_count);
     DrawRow(&mem_dc, y, _T("컬링됨"), text, kColorYellow, width);
 
-    float culled_ratio = (m_totalCount > 0)
-        ? static_cast<float>(culled_count) / static_cast<float>(m_totalCount) * 100.0f
-        : 0.0f;
-    text.Format(_T("%.1f%%"), culled_ratio);
-    DrawRow(&mem_dc, y, _T("컬링 비율"), text, kColorAccent, width);
-
     mem_dc.SelectObject(old_font);
 
     dc.BitBlt(0, 0, client_rect.Width(), client_rect.Height(), &mem_dc, 0, 0, SRCCOPY);
@@ -114,4 +131,34 @@ void CInspectorWnd::UpdateStats(int32_t visible_count, int32_t total_count) {
     m_visibleCount = visible_count;
     m_totalCount = total_count;
     Invalidate(FALSE);   // 다시 그려달라고 요청만 함(배경은 어차피 안 지우니 FALSE로 충분)
+}
+
+void CInspectorWnd::OnToggleQuadTreeClicked() {
+    m_showQuadTreeLevels = !m_showQuadTreeLevels;
+    m_toggleQuadTreeButton.SetWindowText(
+        m_showQuadTreeLevels ? _T("레벨 표시: ON") : _T("레벨 표시: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowQuadTreeLevels(m_showQuadTreeLevels);
+    }
+}
+
+void CInspectorWnd::OnToggleAllNodesClicked() {
+    m_showAllNodes = !m_showAllNodes;
+    m_toggleAllNodesButton.SetWindowText(
+        m_showAllNodes ? _T("전체 노드 보기: ON") : _T("전체 노드 보기: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowAllNodes(m_showAllNodes);
+    }
+}
+
+void CInspectorWnd::OnToggleObjectColorClicked() {
+    m_showAllObjectLevelColors = !m_showAllObjectLevelColors;
+    m_toggleObjectColorButton.SetWindowText(
+        m_showAllObjectLevelColors ? _T("객체 레벨 색상: ON") : _T("객체 레벨 색상: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowAllObjectLevelColors(m_showAllObjectLevelColors);
+    }
 }

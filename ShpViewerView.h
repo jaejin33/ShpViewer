@@ -21,6 +21,9 @@ public:
 // 작업입니다.
 public:
 	void UpdateInspector(int32_t visible_count, int32_t total_count);
+	void SetShowQuadTreeLevels(bool show);
+	void SetShowAllNodes(bool show);
+	void SetShowAllObjectLevelColors(bool show);
 
 // 재정의입니다.
 public:
