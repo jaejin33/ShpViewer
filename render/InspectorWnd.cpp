@@ -24,6 +24,7 @@ BEGIN_MESSAGE_MAP(CInspectorWnd, CWnd)
     ON_BN_CLICKED(kToggleFillButtonId, &CInspectorWnd::OnToggleFillClicked)
     ON_BN_CLICKED(kToggleObjectBoundsButtonId, &CInspectorWnd::OnToggleObjectBoundsClicked)
     ON_BN_CLICKED(kToggle3DButtonId, &CInspectorWnd::OnToggle3DClicked)
+    ON_BN_CLICKED(kToggleEdgesButtonId, &CInspectorWnd::OnToggleEdgesClicked)
 END_MESSAGE_MAP()
 
 BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
@@ -61,9 +62,16 @@ BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
     m_toggle3DButton.Create(
         m_show3D ? _T("3D: ON") : _T("3D: OFF"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        CRect(10, 420, 210, 450),
+        CRect(10, 420, 108, 450),
         this,
         kToggle3DButtonId);
+
+    m_toggleEdgesButton.Create(
+        m_showEdges ? _T("윤곽선: ON") : _T("윤곽선: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(112, 420, 210, 450),
+        this,
+        kToggleEdgesButtonId);
 
     return TRUE;
 }
@@ -141,6 +149,9 @@ void CInspectorWnd::OnPaint() {
     text.Format(_T("%d"), culled_count);
     DrawRow(&mem_dc, y, _T("컬링됨"), text, kColorYellow, width);
 
+    text.Format(_T("%.1f"), m_fps);
+    DrawRow(&mem_dc, y, _T("FPS"), text, kColorAccent, width);
+
     mem_dc.SelectObject(old_font);
 
     dc.BitBlt(0, 0, client_rect.Width(), client_rect.Height(), &mem_dc, 0, 0, SRCCOPY);
@@ -148,12 +159,11 @@ void CInspectorWnd::OnPaint() {
     mem_dc.SelectObject(old_bitmap);
 }
 
-void CInspectorWnd::UpdateStats(int32_t visible_count, int32_t total_count) {
-    if (visible_count == m_visibleCount && total_count == m_totalCount) {
-        return;
-    }
+void CInspectorWnd::UpdateStats(int32_t visible_count, int32_t total_count, float fps) {
+    
     m_visibleCount = visible_count;
     m_totalCount = total_count;
+    m_fps = fps;
     Invalidate(FALSE);   // 다시 그려달라고 요청만 함(배경은 어차피 안 지우니 FALSE로 충분)
 }
 
@@ -214,5 +224,15 @@ void CInspectorWnd::OnToggle3DClicked() {
 
     if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
         view->SetShow3D(m_show3D);
+    }
+}
+
+void CInspectorWnd::OnToggleEdgesClicked() {
+    m_showEdges = !m_showEdges;
+    m_toggleEdgesButton.SetWindowText(
+        m_showEdges ? _T("윤곽선: ON") : _T("윤곽선: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowEdges(m_showEdges);
     }
 }

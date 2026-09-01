@@ -240,8 +240,8 @@ void CShpViewerView::OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*p
 	m_glView.Invalidate();
 }
 
-void CShpViewerView::UpdateInspector(int32_t visible_count, int32_t total_count) {
-	m_inspector.UpdateStats(visible_count, total_count);
+void CShpViewerView::UpdateInspector(int32_t visible_count, int32_t total_count, float fps) {
+	m_inspector.UpdateStats(visible_count, total_count, fps);
 }
 
 void CShpViewerView::SetShowQuadTreeLevels(bool show) {
@@ -266,4 +266,8 @@ void CShpViewerView::SetShowObjectBounds(bool show) {
 
 void CShpViewerView::SetShow3D(bool show) {
 	m_glView.SetShow3D(show);
+}
+
+void CShpViewerView::SetShowEdges(bool show) {
+	m_glView.SetShowEdges(show);
 }

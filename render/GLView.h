@@ -53,6 +53,7 @@ public:
     void SetShowFill(bool show);
     void SetShowObjectBounds(bool show);
     void SetShow3D(bool show);
+    void SetShowEdges(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -86,12 +87,17 @@ protected:
     bool m_showFill = true;
     bool m_showObjectBounds = false;
     bool m_show3D = true;
+    bool m_showEdges = true;
     GLuint m_nodeBoxVertexBuffer = 0;
     GLuint m_objectBoxVertexBuffer = 0;
 
     bool m_showFrustum = false;
     std::array<Vec3, 8> m_frustumCorners{};
     GLuint m_frustumVertexBuffer = 0;
+    LARGE_INTEGER m_lastFrameTimestamp{};
+    int32_t m_fpsFrameCount = 0;
+    double m_fpsAccumulatedSeconds = 0.0f;
+    float m_fps = 0.0f;
 
     void CaptureFrustumCorners();
     void RenderFrustum();

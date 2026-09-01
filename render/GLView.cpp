@@ -82,6 +82,12 @@ namespace {
     };
     constexpr int32_t kLevelColorCount = 14;
     constexpr float kPlaceholderBuildingHeight = 10.0f;
+    constexpr float kWallBottomShade = 0.6f;
+
+    struct ExtrudeVertex {
+        Vec3 position;
+        float shade = 1.0f;
+    };
 
     GLuint CompileShader(GLenum type, const char* source) {
         GLuint shader = glCreateShader(type);
@@ -150,18 +156,22 @@ BOOL CGLView::InitEGL()
 bool CGLView::InitShader() {
     const char* vertex_source = R"(#version 300 es
 layout(location = 0) in vec3 a_position;
+layout(location = 1) in float a_shade;
 uniform mat4 u_mvp;
+out float v_shade;
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
+    v_shade = a_shade;
 }
 )";
 
     const char* fragment_source = R"(#version 300 es
 precision mediump float;
 uniform vec4 u_color;
+in float v_shade;
 out vec4 frag_color;
 void main() {
-    frag_color = u_color;
+    frag_color = vec4(u_color.rgb * v_shade, u_color.a);
 }
 )";
 
@@ -193,6 +203,24 @@ void CGLView::Render()
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start);
 
+    LARGE_INTEGER freq_for_fps, now;
+    QueryPerformanceFrequency(&freq_for_fps);
+    QueryPerformanceCounter(&now);
+
+    if (m_lastFrameTimestamp.QuadPart != 0) {
+        double frame_seconds = static_cast<double>(now.QuadPart - m_lastFrameTimestamp.QuadPart)
+            / static_cast<double>(freq_for_fps.QuadPart);
+        m_fpsAccumulatedSeconds += frame_seconds;
+        ++m_fpsFrameCount;
+
+        if (m_fpsAccumulatedSeconds >= 1.0) {
+            m_fps = static_cast<float>(m_fpsFrameCount / m_fpsAccumulatedSeconds);
+            m_fpsFrameCount = 0;
+            m_fpsAccumulatedSeconds = 0.0;
+        }
+    }
+    m_lastFrameTimestamp = now;
+
     int32_t visible_count = 0;
 
     if (m_shaderProgram != 0 && !m_drawRanges.empty()) {
@@ -210,6 +238,9 @@ void CGLView::Render()
         glUniformMatrix4fv(mvp_loc, 1, GL_FALSE, mvp.m);
         GLint color_loc = glGetUniformLocation(m_shaderProgram, "u_color");
         glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 기본 색: 흰색
+
+        glDisableVertexAttribArray(1);
+        glVertexAttrib1f(1, 1.0f);
 
         // ── 4. 윤곽선(line loop)용 버퍼 bind ──
         glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
@@ -294,32 +325,62 @@ void CGLView::Render()
 
         // ── 8. 채우기(fill) 그리기 — 
         if (m_showFill && !filled_candidates.empty()) {
+            glDisableVertexAttribArray(1);
+            glVertexAttrib1f(1, 1.0f);
             glBindBuffer(GL_ARRAY_BUFFER, m_fillVertexBuffer);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_fillIndexBuffer);
 
-            for (int32_t idx : filled_candidates) {
+            for (size_t j = 0; j < filled_candidates.size(); ++j) {
+                int32_t idx = filled_candidates[j];
+
+                if (m_showAllObjectLevelColors) {
+                    int32_t node_depth = object_box_depths[j];
+                    int32_t color_index = (node_depth < kLevelColorCount) ? node_depth : (kLevelColorCount - 1);
+                    glUniform4fv(color_loc, 1, kLevelColors[color_index]);
+                }
+
                 const FillRange& fill_range = m_fillRanges[idx];
                 glDrawElements(GL_TRIANGLES, fill_range.index_count, GL_UNSIGNED_INT,
                     (void*)(fill_range.first_index * sizeof(uint32_t)));
             }
+
+            if (m_showAllObjectLevelColors) {
+                glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 흰색으로 복구
+            }
         }
 
         if (m_show3D && !filled_candidates.empty()) {
-            glEnable(GL_POLYGON_OFFSET_FILL);   // 추가
+            glEnable(GL_POLYGON_OFFSET_FILL);   
             glPolygonOffset(1.0f, 1.0f);
             glBindBuffer(GL_ARRAY_BUFFER, m_extrudeVertexBuffer);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ExtrudeVertex), (void*)offsetof(ExtrudeVertex, position));
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(ExtrudeVertex), (void*)offsetof(ExtrudeVertex, shade));
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_extrudeIndexBuffer);
 
-            for (int32_t idx : filled_candidates) {
+            for (size_t j = 0; j < filled_candidates.size(); ++j) {
+                int32_t idx = filled_candidates[j];
+
+                if (m_showAllObjectLevelColors) {
+                    int32_t node_depth = object_box_depths[j];
+                    int32_t color_index = (node_depth < kLevelColorCount) ? node_depth : (kLevelColorCount - 1);
+                    glUniform4fv(color_loc, 1, kLevelColors[color_index]);
+                }
+
                 const ExtrudeRange& extrude_range = m_extrudeRanges[idx];
                 glDrawElements(GL_TRIANGLES, extrude_range.index_count, GL_UNSIGNED_INT, (void*)(extrude_range.first_index * sizeof(uint32_t)));
+            }
+
+            if (m_showAllObjectLevelColors) {
+                glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  
             }
             glDisable(GL_POLYGON_OFFSET_FILL);
         }
 
-        if (m_show3D && !filled_candidates.empty()) {
+        if (m_showEdges && !filled_candidates.empty()) {
+            glDisableVertexAttribArray(1);
+            glVertexAttrib1f(1, 1.0f);
             glBindBuffer(GL_ARRAY_BUFFER, m_edgeVertexBuffer);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
 
@@ -354,7 +415,7 @@ void CGLView::Render()
 
     // ── 11. 인스펙터 패널 갱신 ──
     if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
-        view->UpdateInspector(visible_count, static_cast<int32_t>(m_recordRanges.size()));
+        view->UpdateInspector(visible_count, static_cast<int32_t>(m_recordRanges.size()), m_fps);
     }
 
     // ── 12. 화면에 표시 ──
@@ -442,6 +503,11 @@ void CGLView::SetShow3D(bool show) {
     Invalidate();
 }
 
+void CGLView::SetShowEdges(bool show) {
+    m_showEdges = show;
+    Invalidate();
+}
+
 void CGLView::SetDataset(const ShpDataset* dataset) {
     m_pDataset = dataset;
     if (m_pDataset) {
@@ -462,7 +528,7 @@ void CGLView::BuildDebugGeometry() {
     std::vector<Vec3> vertices;
     std::vector<Vec3> fill_vertices;
     std::vector<uint32_t> fill_indices;
-    std::vector<Vec3> extrude_vertices;
+    std::vector<ExtrudeVertex> extrude_vertices;
     std::vector<uint32_t> extrude_indices;
     std::vector<Vec3> edge_vertices;
 
@@ -527,7 +593,7 @@ void CGLView::BuildDebugGeometry() {
         }
         for (const std::vector<Vec3>& ring : rings) {
             for (const Vec3& p : ring) {
-                extrude_vertices.push_back(Vec3(p.x, building_height, p.z));
+                extrude_vertices.push_back({ Vec3(p.x, building_height, p.z), 1.0f });
             }
         }
 
@@ -542,10 +608,10 @@ void CGLView::BuildDebugGeometry() {
 
                 int32_t wall_vertex_offset = static_cast<int32_t>(extrude_vertices.size());
 
-                extrude_vertices.push_back(Vec3(p0.x, 0.0f, p0.z));
-                extrude_vertices.push_back(Vec3(p1.x, 0.0f, p1.z));
-                extrude_vertices.push_back(Vec3(p1.x, building_height, p1.z));
-                extrude_vertices.push_back(Vec3(p0.x, building_height, p0.z));
+                extrude_vertices.push_back({ Vec3(p0.x, 0.0f, p0.z), kWallBottomShade });
+                extrude_vertices.push_back({ Vec3(p1.x, 0.0f, p1.z), kWallBottomShade });
+                extrude_vertices.push_back({ Vec3(p1.x, building_height, p1.z), 1.0f });
+                extrude_vertices.push_back({ Vec3(p0.x, building_height, p0.z), 1.0f });
 
                 extrude_indices.push_back(wall_vertex_offset + 0);
                 extrude_indices.push_back(wall_vertex_offset + 1);
@@ -614,7 +680,7 @@ void CGLView::BuildDebugGeometry() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, fill_indices.size() * sizeof(uint32_t), fill_indices.data(), GL_STATIC_DRAW);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_extrudeVertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, extrude_vertices.size() * sizeof(Vec3), extrude_vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, extrude_vertices.size() * sizeof(ExtrudeVertex), extrude_vertices.data(), GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_extrudeIndexBuffer);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, extrude_indices.size() * sizeof(uint32_t), extrude_indices.data(), GL_STATIC_DRAW);

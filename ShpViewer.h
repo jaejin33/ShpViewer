@@ -6,7 +6,7 @@
 #ifndef __AFXWIN_H__
 	#error "PCH에 대해 이 파일을 포함하기 전에 'pch.h'를 포함합니다."
 #endif
-
+#include "pch.h"
 #include "resource.h"       // 주 기호입니다.
 
 
@@ -18,7 +18,7 @@ class CShpViewerApp : public CWinAppEx
 {
 public:
 	CShpViewerApp() noexcept;
-
+	virtual BOOL OnIdle(LONG lCount) override;
 
 // 재정의입니다.
 public:

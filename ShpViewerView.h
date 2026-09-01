@@ -20,13 +20,14 @@ public:
 	CInspectorWnd m_inspector;
 // 작업입니다.
 public:
-	void UpdateInspector(int32_t visible_count, int32_t total_count);
+	void UpdateInspector(int32_t visible_count, int32_t total_count, float fps);
 	void SetShowQuadTreeLevels(bool show);
 	void SetShowAllNodes(bool show);
 	void SetShowAllObjectLevelColors(bool show);
 	void SetShowFill(bool show);
 	void SetShowObjectBounds(bool show);
 	void SetShow3D(bool show);
+	void SetShowEdges(bool show);
 
 // 재정의입니다.
 public:

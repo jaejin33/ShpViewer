@@ -215,5 +215,17 @@ void CShpViewerApp::SaveCustomState()
 
 // CShpViewerApp 메시지 처리기
 
+BOOL CShpViewerApp::OnIdle(LONG lCount)
+{
+	BOOL more_idle_needed = CWinAppEx::OnIdle(lCount);
 
+	if (CFrameWnd* main_frame = dynamic_cast<CFrameWnd*>(m_pMainWnd)) {
+		if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(main_frame->GetActiveView())) {
+			view->m_glView.Invalidate();
+			return TRUE;
+		}
+	}
+
+	return more_idle_needed;
+}
 
