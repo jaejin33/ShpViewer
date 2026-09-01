@@ -70,5 +70,6 @@ void QueryVisibleObjects(
 // 컬링 여부와 무관하게 트리 전체를 수집
 void CollectAllQuadTreeNodes(
 	const QuadTreeNode* node,
+	const std::array<Plane, 6>& planes,
 	int32_t depth,
 	std::vector<NodeDebugInfo>* out_nodes);

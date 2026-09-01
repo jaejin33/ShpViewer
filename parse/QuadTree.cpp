@@ -15,12 +15,23 @@ void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& ob
 
 	int32_t index = static_cast<int32_t>(child_index);
 
-	if (!node->children[index]) {
-		node->children[index] = std::make_unique<QuadTreeNode>();
-		node->children[index]->tight_bounds = ComputeChildTightBounds(node->tight_bounds, child_index);
-		node->children[index]->loose_bounds = ComputeLooseBounds(node->children[index]->tight_bounds, kDefaultLoosenessFactor);
+	QuadBounds candidate_tight_bounds;
+	QuadBounds candidate_loose_bounds;
+	if (node->children[index]) {
+		candidate_tight_bounds = node->children[index]->tight_bounds;
+		candidate_loose_bounds = node->children[index]->loose_bounds;
 	}
-	if (IsFullInside(node->children[index]->loose_bounds, object_bounds)) {
+	else {
+		candidate_tight_bounds = ComputeChildTightBounds(node->tight_bounds, child_index);
+		candidate_loose_bounds = ComputeLooseBounds(candidate_tight_bounds, kDefaultLoosenessFactor);
+	}
+
+	if (IsFullInside(candidate_loose_bounds, object_bounds)) {
+		if (!node->children[index]) {
+			node->children[index] = std::make_unique<QuadTreeNode>();
+			node->children[index]->tight_bounds = candidate_tight_bounds;
+			node->children[index]->loose_bounds = candidate_loose_bounds;
+		}
 		InsertObject(node->children[index].get(), object_index, object_bounds, depth + 1);
 	}
 	else {
@@ -177,6 +188,7 @@ void QueryVisibleObjects(
 
 void CollectAllQuadTreeNodes(
 	const QuadTreeNode* node,
+	const std::array<Plane, 6>& planes,
 	int32_t depth,
 	std::vector<NodeDebugInfo>* out_nodes) {
 
@@ -184,9 +196,16 @@ void CollectAllQuadTreeNodes(
 		return;
 	}
 
+	Vec3 loose_min(node->loose_bounds.min_x, 0.0f, node->loose_bounds.min_z);
+	Vec3 loose_max(node->loose_bounds.max_x, 0.0f, node->loose_bounds.max_z);
+
+	if (!IsBoxInsideFrustum(planes, loose_min, loose_max)) {
+		return;
+	}
+
 	out_nodes->push_back({ node->tight_bounds, depth });
 
 	for (const std::unique_ptr<QuadTreeNode>& child : node->children) {
-		CollectAllQuadTreeNodes(child.get(), depth + 1, out_nodes);
+		CollectAllQuadTreeNodes(child.get(), planes, depth + 1, out_nodes);
 	}
 }

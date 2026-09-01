@@ -21,10 +21,13 @@ BEGIN_MESSAGE_MAP(CInspectorWnd, CWnd)
     ON_BN_CLICKED(kToggleQuadTreeButtonId, &CInspectorWnd::OnToggleQuadTreeClicked)
     ON_BN_CLICKED(kToggleAllNodesButtonId, &CInspectorWnd::OnToggleAllNodesClicked)
     ON_BN_CLICKED(kToggleObjectColorButtonId, &CInspectorWnd::OnToggleObjectColorClicked)
+    ON_BN_CLICKED(kToggleFillButtonId, &CInspectorWnd::OnToggleFillClicked)
+    ON_BN_CLICKED(kToggleObjectBoundsButtonId, &CInspectorWnd::OnToggleObjectBoundsClicked)
+    ON_BN_CLICKED(kToggle3DButtonId, &CInspectorWnd::OnToggle3DClicked)
 END_MESSAGE_MAP()
 
 BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
-    if (!CWnd::Create(nullptr, _T(""), WS_CHILD | WS_VISIBLE,
+    if (!CWnd::Create(nullptr, _T(""), WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
         CRect(0, 0, 0, 0), parent_wnd, 0)) {
         return FALSE;
     }
@@ -43,6 +46,24 @@ BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
     m_toggleObjectColorButton.Create(_T("객체 레벨 색상: OFF"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         CRect(10, 300, 210, 330), this, kToggleObjectColorButtonId);
+
+    m_toggleFillButton.Create(
+        m_showFill ? _T("채우기: ON") : _T("채우기: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 340, 210, 370),
+        this,
+        kToggleFillButtonId);
+
+    m_toggleObjectBoundsButton.Create(_T("객체 MBR: OFF"),   
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 380, 210, 410), this, kToggleObjectBoundsButtonId);
+
+    m_toggle3DButton.Create(
+        m_show3D ? _T("3D: ON") : _T("3D: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 420, 210, 450),
+        this,
+        kToggle3DButtonId);
 
     return TRUE;
 }
@@ -128,6 +149,9 @@ void CInspectorWnd::OnPaint() {
 }
 
 void CInspectorWnd::UpdateStats(int32_t visible_count, int32_t total_count) {
+    if (visible_count == m_visibleCount && total_count == m_totalCount) {
+        return;
+    }
     m_visibleCount = visible_count;
     m_totalCount = total_count;
     Invalidate(FALSE);   // 다시 그려달라고 요청만 함(배경은 어차피 안 지우니 FALSE로 충분)
@@ -160,5 +184,35 @@ void CInspectorWnd::OnToggleObjectColorClicked() {
 
     if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
         view->SetShowAllObjectLevelColors(m_showAllObjectLevelColors);
+    }
+}
+
+void CInspectorWnd::OnToggleFillClicked() {
+    m_showFill = !m_showFill;
+    m_toggleFillButton.SetWindowText(
+        m_showFill ? _T("채우기: ON") : _T("채우기: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowFill(m_showFill);
+    }
+}
+
+void CInspectorWnd::OnToggleObjectBoundsClicked() {
+    m_showObjectBounds = !m_showObjectBounds;
+    m_toggleObjectBoundsButton.SetWindowText(
+        m_showObjectBounds ? _T("객체 MBR: ON") : _T("객체 MBR: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowObjectBounds(m_showObjectBounds);
+    }
+}
+
+void CInspectorWnd::OnToggle3DClicked() {
+    m_show3D = !m_show3D;
+    m_toggle3DButton.SetWindowText(
+        m_show3D ? _T("3D: ON") : _T("3D: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShow3D(m_show3D);
     }
 }

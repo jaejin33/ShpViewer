@@ -113,7 +113,7 @@ void CShpViewerView::OnInitialUpdate() {
 	CView::OnInitialUpdate();
 
 	//ShpDataset dataset;
-	//bool success = BuildShpDataset("C:\\Users\\egis\\Desktop\\F_FAC_BUILDING_26_202505.shp", &dataset);
+	//bool success = BuildShpDataset("C:\\Users\\egis\\Desktop\\F_FAC_BUILDING_BUSAN\\F_FAC_BUILDING_26_202505.shp", &dataset);
 	//if (!success) {
 	//	return;
 	//}
@@ -254,4 +254,16 @@ void CShpViewerView::SetShowAllNodes(bool show) {
 
 void CShpViewerView::SetShowAllObjectLevelColors(bool show) {
 	m_glView.SetShowAllObjectLevelColors(show);
+}
+
+void CShpViewerView::SetShowFill(bool show) {
+	m_glView.SetShowFill(show);
+}
+
+void CShpViewerView::SetShowObjectBounds(bool show) {
+	m_glView.SetShowObjectBounds(show);
+}
+
+void CShpViewerView::SetShow3D(bool show) {
+	m_glView.SetShow3D(show);
 }

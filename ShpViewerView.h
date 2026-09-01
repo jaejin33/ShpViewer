@@ -24,6 +24,9 @@ public:
 	void SetShowQuadTreeLevels(bool show);
 	void SetShowAllNodes(bool show);
 	void SetShowAllObjectLevelColors(bool show);
+	void SetShowFill(bool show);
+	void SetShowObjectBounds(bool show);
+	void SetShow3D(bool show);
 
 // 재정의입니다.
 public:

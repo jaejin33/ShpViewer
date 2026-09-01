@@ -4,6 +4,7 @@
 #include <GLES3/gl3.h>
 #include "../camera/Camera.h"
 #include "../parse/ShpDataset.h"
+#include <array>
 
 class CGLView :
     public CWnd
@@ -22,6 +23,21 @@ class CGLView :
         Vec3 bounds_max;
     };
 
+    struct FillRange {
+        GLint first_index = 0;
+        GLint index_count = 0;
+    };
+
+    struct ExtrudeRange {
+        GLint first_index = 0;
+        GLint index_count = 0;
+    };
+
+    struct EdgeRange {
+        GLint first_vertex = 0;
+        GLint vertex_count = 0;
+    };
+
 public:
     CGLView();
     virtual ~CGLView();
@@ -33,6 +49,10 @@ public:
     void SetShowQuadTreeLevels(bool show);
     void SetShowAllNodes(bool show);
     void SetShowAllObjectLevelColors(bool show);
+    void SetShowFrustum(bool show);
+    void SetShowFill(bool show);
+    void SetShowObjectBounds(bool show);
+    void SetShow3D(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -51,11 +71,31 @@ protected:
     GLuint m_shaderProgram = 0;
     GLuint m_vertexBuffer = 0;
     std::vector<DrawRange> m_drawRanges;
+    GLuint m_fillVertexBuffer = 0;
+    GLuint m_fillIndexBuffer = 0;
+    std::vector<FillRange> m_fillRanges;
+    GLuint m_extrudeVertexBuffer = 0;
+    GLuint m_extrudeIndexBuffer = 0;
+    std::vector<ExtrudeRange> m_extrudeRanges;
+    GLuint m_edgeVertexBuffer = 0;
+    std::vector<EdgeRange> m_edgeRanges;
 
     bool m_showAllObjectLevelColors = false;
     bool m_showAllNodes = false;
     bool m_showQuadTreeLevels = false;
+    bool m_showFill = true;
+    bool m_showObjectBounds = false;
+    bool m_show3D = true;
     GLuint m_nodeBoxVertexBuffer = 0;
+    GLuint m_objectBoxVertexBuffer = 0;
+
+    bool m_showFrustum = false;
+    std::array<Vec3, 8> m_frustumCorners{};
+    GLuint m_frustumVertexBuffer = 0;
+
+    void CaptureFrustumCorners();
+    void RenderFrustum();
+    void RenderObjectBounds(const std::vector<int32_t>& visible_indices, const std::vector<int32_t>& depths);
 
     bool InitShader();
     void BuildDebugGeometry();

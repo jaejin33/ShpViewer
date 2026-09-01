@@ -86,6 +86,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -216,6 +219,8 @@
     <ClInclude Include="math\Mat4.h" />
     <ClInclude Include="math\Vec3.h" />
     <ClInclude Include="parse\QuadTree.h" />
+    <ClInclude Include="parse\DbfParser.h" />
+    <ClInclude Include="parse\DbfTypes.h" />
     <ClInclude Include="parse\ShpDataset.h" />
     <ClInclude Include="parse\ShpParser.h" />
     <ClInclude Include="parse\ShpTypes.h" />
@@ -239,6 +244,7 @@
     <ClCompile Include="camera\Camera.cpp" />
     <ClCompile Include="culling\Frustum.cpp" />
     <ClCompile Include="parse\QuadTree.cpp" />
+    <ClCompile Include="parse\DbfParser.cpp" />
     <ClCompile Include="parse\ShpDataset.cpp" />
     <ClCompile Include="parse\ShpParser.cpp" />
     <ClCompile Include="render\GLView.cpp" />

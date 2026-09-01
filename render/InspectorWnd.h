@@ -6,6 +6,9 @@ namespace {
     constexpr int kToggleQuadTreeButtonId = 2001;
     constexpr int kToggleAllNodesButtonId = 2002;
     constexpr int kToggleObjectColorButtonId = 2003;
+    constexpr int kToggleFillButtonId = 2004;
+    constexpr int kToggleObjectBoundsButtonId = 2005;
+    constexpr int kToggle3DButtonId = 2006;
 }
 
 class CInspectorWnd : public CWnd
@@ -25,9 +28,15 @@ protected:
     CButton m_toggleQuadTreeButton;
     CButton m_toggleAllNodesButton;
     CButton m_toggleObjectColorButton;
+    CButton m_toggleFillButton;
+    CButton m_toggleObjectBoundsButton;
+    CButton m_toggle3DButton;
+    bool m_showFill = true;
     bool m_showQuadTreeLevels = false;
     bool m_showAllNodes = false;
     bool m_showAllObjectLevelColors = false;
+    bool m_showObjectBounds = false;
+    bool m_show3D = true;
 
     void DrawSection(CDC* dc, int& y, LPCTSTR title, COLORREF color, int width, CFont* font);
     void DrawRow(CDC* dc, int& y, LPCTSTR label, const CString& value, COLORREF value_color, int width);
@@ -38,4 +47,7 @@ protected:
     afx_msg void OnToggleQuadTreeClicked();
     afx_msg void OnToggleAllNodesClicked();
     afx_msg void OnToggleObjectColorClicked();
+    afx_msg void OnToggleFillClicked();
+    afx_msg void OnToggleObjectBoundsClicked();
+    afx_msg void OnToggle3DClicked();
 };
