@@ -50,35 +50,35 @@ BEGIN_MESSAGE_MAP(CGLView, CWnd)
     ON_WM_CONTEXTMENU()
 END_MESSAGE_MAP()
 
-CGLView::CGLView() : m_camera(Vec3(0.0f, 0.0f, 0.0f), 10.0f, 0.0f, 0.5f) {}
+CGLView::CGLView() : m_camera(Vec3(0.0f, 0.0f, 0.0f), 10.0f, 0.0f, 1.55f) {}
 CGLView::~CGLView() { Cleanup(); }
 
 namespace {
     constexpr float kCameraFovRadians = 0.7853982f;
-    constexpr float kCameraNearPlane = 1.0f;
-    constexpr float kCameraFarPlane = 50000.0f;
+    constexpr float kCameraNearPlane = 5.0f;
+    constexpr float kCameraFarPlane = 4000.0f;
     constexpr float kZoomFactor = 0.95f;
-    constexpr float kMaxDrawDistance = 4000.0f;
+    constexpr float kMaxDrawDistance = 3200.0f;
     constexpr float kMaxDrawDistanceSquared = kMaxDrawDistance * kMaxDrawDistance;
     constexpr float kNodeMinSizeToDistanceRatio = 0.014f;     // 노드용 
     constexpr float kNodeMinSizeToDistanceRatioSquared = kNodeMinSizeToDistanceRatio * kNodeMinSizeToDistanceRatio;
-    constexpr float kObjectMinSizeToDistanceRatio = 0.02f;    // 객체용
+    constexpr float kObjectMinSizeToDistanceRatio = 0.03f;    // 객체용
     constexpr float kObjectMinSizeToDistanceRatioSquared = kObjectMinSizeToDistanceRatio * kObjectMinSizeToDistanceRatio;
     constexpr float kLevelColors[14][4] = {
-       {1.00f, 0.24f, 0.24f, 1.0f},  // depth 0
-       {1.00f, 0.59f, 0.00f, 1.0f},  // depth 1
-       {1.00f, 0.90f, 0.00f, 1.0f},  // depth 2
-       {0.59f, 1.00f, 0.00f, 1.0f},  // depth 3
-       {0.00f, 0.86f, 0.31f, 1.0f},  // depth 4
-       {0.00f, 0.86f, 0.78f, 1.0f},  // depth 5
-       {0.00f, 0.63f, 1.00f, 1.0f},  // depth 6
-       {0.24f, 0.31f, 1.00f, 1.0f},  // depth 7
-       {0.67f, 0.24f, 1.00f, 1.0f},  // depth 8
-       {1.00f, 0.24f, 0.78f, 1.0f},  // depth 9
-       {0.55f, 0.10f, 0.10f, 1.0f},  // depth 10 (dark red)
-       {0.55f, 0.30f, 0.05f, 1.0f},  // depth 11 (dark orange/brown)
-       {0.05f, 0.40f, 0.15f, 1.0f},  // depth 12 (dark green) - 가장 많은 객체가 몰리는 depth
-       {0.05f, 0.15f, 0.55f, 1.0f},  // depth 13 (dark navy)
+        {0.60f, 0.26f, 0.38f, 1.0f},  // depth 0
+        {0.23f, 0.67f, 0.09f, 1.0f},  // depth 1
+        {0.01f, 0.25f, 1.00f, 1.0f},  // depth 2
+        {0.16f, 0.61f, 0.80f, 1.0f},  // depth 3
+        {0.58f, 0.44f, 0.99f, 1.0f},  // depth 4
+        {0.36f, 0.42f, 0.00f, 1.0f},  // depth 5
+        {0.64f, 0.36f, 1.00f, 1.0f},  // depth 6
+        {0.19f, 0.16f, 0.98f, 1.0f},  // depth 7
+        {0.00f, 0.51f, 1.00f, 1.0f},  // depth 8  - 조정됨 (하늘색 쪽으로)
+        {0.18f, 0.82f, 0.75f, 1.0f},  // depth 9
+        {0.06f, 0.61f, 0.00f, 1.0f},  // depth 10 - 그대로 반영
+        {0.90f, 0.84f, 0.24f, 1.0f},  // depth 11
+        {0.95f, 0.51f, 0.23f, 1.0f},  // depth 12
+        {0.98f, 0.07f, 0.07f, 1.0f},  // depth 13
     };
     constexpr int32_t kLevelColorCount = 14;
     constexpr float kPlaceholderBuildingHeight = 10.0f;
@@ -274,20 +274,23 @@ void CGLView::Render()
         int32_t candidate_count = static_cast<int32_t>(candidate_indices.size());
         int32_t draw_call_count = 0;
 
-        // ── 7. 객체별 narrow-phase 컬링 + LOD 판정 + 윤곽선 그리기 (컬링 2단계) ──
+        // ── 7. 객체별 컬링 ──
         for (size_t i = 0; i < candidate_indices.size(); ++i) {
             int32_t candidate_index = candidate_indices[i];
             const RecordRange& record_range = m_recordRanges[candidate_index];
 
             if (!IsBoxInsideFrustum(planes, record_range.bounds_min, record_range.bounds_max)) {
-                continue;  // 프러스텀 재검사 탈락
+                continue;  // 프러스텀 재검사
             }
 
-            Vec3 object_center = (record_range.bounds_min + record_range.bounds_max) * 0.5f;
-            float distance_sq = Vec3LengthSquared(object_center - m_camera.GetEye());
+            Vec3 camera_eye = m_camera.GetEye();
+            float closest_x = std::clamp(camera_eye.x, record_range.bounds_min.x, record_range.bounds_max.x);
+            float closest_z = std::clamp(camera_eye.z, record_range.bounds_min.z, record_range.bounds_max.z);
+            Vec3 closest_point(closest_x, 0.0f, closest_z);
+            float distance_sq = Vec3LengthSquared(closest_point - camera_eye);
 
             if (distance_sq > kMaxDrawDistanceSquared) {
-                continue;  // draw distance 컷오프
+                continue;  // draw distance 컷
             }
 
             float width = record_range.bounds_max.x - record_range.bounds_min.x;
@@ -295,7 +298,7 @@ void CGLView::Render()
             float object_size_sq = width * depth;
 
             if (object_size_sq < kObjectMinSizeToDistanceRatioSquared * distance_sq) {
-                continue;  // 객체 size/distance LOD 탈락
+                continue;  // 객체 size/distance
             }
 
             ++visible_count;
@@ -308,11 +311,13 @@ void CGLView::Render()
             }
 
             // 윤곽선 그리기
-            int32_t end_index = record_range.first_range_index + record_range.range_count;
-            for (int32_t k = record_range.first_range_index; k < end_index; ++k) {
-                const DrawRange& range = m_drawRanges[k];
-                glDrawArrays(GL_LINE_LOOP, range.first, range.count);
-                ++draw_call_count;
+            if (m_showObjectOutline) {
+                int32_t end_index = record_range.first_range_index + record_range.range_count;
+                for (int32_t k = record_range.first_range_index; k < end_index; ++k) {
+                    const DrawRange& range = m_drawRanges[k];
+                    glDrawArrays(GL_LINE_LOOP, range.first, range.count);
+                    ++draw_call_count;
+                }
             }
 
             filled_candidates.push_back(candidate_index);  // 채우기 대상으로 기록
@@ -384,7 +389,7 @@ void CGLView::Render()
             glBindBuffer(GL_ARRAY_BUFFER, m_edgeVertexBuffer);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
 
-            glUniform4f(color_loc, 0.0f, 0.0f, 0.0f, 1.0f);
+            glUniform4f(color_loc, 0.45f, 0.45f, 0.45f, 1.0f);
 
             for (int32_t idx : filled_candidates) {
                 const EdgeRange& edge_range = m_edgeRanges[idx];
@@ -506,6 +511,10 @@ void CGLView::SetShow3D(bool show) {
 void CGLView::SetShowEdges(bool show) {
     m_showEdges = show;
     Invalidate();
+}
+
+void CGLView::SetShowObjectOutline(bool show) {
+    m_showObjectOutline = show;
 }
 
 void CGLView::SetDataset(const ShpDataset* dataset) {
@@ -637,6 +646,7 @@ void CGLView::BuildDebugGeometry() {
         record_range.first_range_index = static_cast<int32_t>(m_drawRanges.size());
         record_range.bounds_min = record.bounds_min;
         record_range.bounds_max = record.bounds_max;
+        record_range.bounds_max.y = building_height;
 
         for (int32_t p = 0; p < part_count; ++p) {
             int32_t start = record.part_start_indices[p];

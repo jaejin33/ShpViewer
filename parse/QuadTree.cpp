@@ -23,7 +23,7 @@ void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& ob
 	}
 	else {
 		candidate_tight_bounds = ComputeChildTightBounds(node->tight_bounds, child_index);
-		candidate_loose_bounds = ComputeLooseBounds(candidate_tight_bounds, kDefaultLoosenessFactor);
+		candidate_loose_bounds = ComputeLooseBounds(candidate_tight_bounds, kLoosenessFactor);
 	}
 
 	if (IsFullInside(candidate_loose_bounds, object_bounds)) {
@@ -125,7 +125,7 @@ std::unique_ptr<QuadTreeNode> BuildQuadTree(const QuadBounds& world_bounds) {
 	std::unique_ptr<QuadTreeNode> root_node = std::make_unique<QuadTreeNode>();
 	root_node->tight_bounds = world_bounds;
 
-	root_node->loose_bounds = ComputeLooseBounds(root_node->tight_bounds, kDefaultLoosenessFactor);
+	root_node->loose_bounds = ComputeLooseBounds(root_node->tight_bounds, kLoosenessFactor);
 
 	return root_node;
 }

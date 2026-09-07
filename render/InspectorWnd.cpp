@@ -10,8 +10,24 @@ namespace {
     constexpr COLORREF kColorMuted = RGB(140, 170, 200);
     constexpr COLORREF kColorGreen = RGB(74, 222, 128);
     constexpr COLORREF kColorYellow = RGB(255, 220, 80);
-}
 
+    constexpr COLORREF kLevelColorsRGB[14] = {
+        RGB(152, 66, 96),   // depth 0
+        RGB(59, 170, 24),   // depth 1
+        RGB(3, 63, 254),    // depth 2
+        RGB(42, 155, 203),  // depth 3
+        RGB(149, 112, 252), // depth 4
+        RGB(91, 108, 0),    // depth 5
+        RGB(162, 91, 255),  // depth 6
+        RGB(49, 42, 249),   // depth 7
+        RGB(0, 129, 255),   // depth 8  - 조정됨
+        RGB(46, 210, 191),  // depth 9
+        RGB(16, 156, 0),    // depth 10 - 그대로
+        RGB(230, 215, 62),  // depth 11
+        RGB(242, 130, 59),  // depth 12
+        RGB(249, 18, 18),   // depth 13
+    };
+}
 CInspectorWnd::CInspectorWnd() {}
 CInspectorWnd::~CInspectorWnd() {}
 
@@ -25,6 +41,7 @@ BEGIN_MESSAGE_MAP(CInspectorWnd, CWnd)
     ON_BN_CLICKED(kToggleObjectBoundsButtonId, &CInspectorWnd::OnToggleObjectBoundsClicked)
     ON_BN_CLICKED(kToggle3DButtonId, &CInspectorWnd::OnToggle3DClicked)
     ON_BN_CLICKED(kToggleEdgesButtonId, &CInspectorWnd::OnToggleEdgesClicked)
+    ON_BN_CLICKED(kToggleOutlineButtonId, &CInspectorWnd::OnToggleOutlineClicked)
 END_MESSAGE_MAP()
 
 BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
@@ -73,7 +90,34 @@ BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
         this,
         kToggleEdgesButtonId);
 
+    m_toggleOutlineButton.Create(
+        m_showObjectOutline ? _T("객체 테두리: ON") : _T("객체 테두리: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 460, 210, 490),
+        this,
+        kToggleOutlineButtonId);
+
+    LayoutButtons(220);
+
     return TRUE;
+}
+
+void CInspectorWnd::LayoutButtons(int start_y) {
+    int y = start_y;
+    auto place_full = [&](CButton& btn) {
+        btn.MoveWindow(CRect(10, y, 210, y + 30));
+        y += 40;
+        };
+
+    place_full(m_toggleQuadTreeButton);
+    place_full(m_toggleAllNodesButton);
+    place_full(m_toggleObjectColorButton);
+    place_full(m_toggleFillButton);
+    place_full(m_toggleObjectBoundsButton);
+    place_full(m_toggleOutlineButton);
+
+    m_toggle3DButton.MoveWindow(CRect(10, y, 108, y + 30));
+    m_toggleEdgesButton.MoveWindow(CRect(112, y, 210, y + 30));
 }
 
 BOOL CInspectorWnd::OnEraseBkgnd(CDC* /*pDC*/) {
@@ -152,11 +196,58 @@ void CInspectorWnd::OnPaint() {
     text.Format(_T("%.1f"), m_fps);
     DrawRow(&mem_dc, y, _T("FPS"), text, kColorAccent, width);
 
+    DrawLevel(&mem_dc, y, width);
+
     mem_dc.SelectObject(old_font);
 
     dc.BitBlt(0, 0, client_rect.Width(), client_rect.Height(), &mem_dc, 0, 0, SRCCOPY);
 
     mem_dc.SelectObject(old_bitmap);
+
+    LayoutButtons(y + 10);
+}
+
+void CInspectorWnd::DrawLevel(CDC* dc, int& y, int width) {
+    constexpr int kLevelCount = 14;
+    constexpr int kSwatchSize = 14;
+    constexpr int kSwatchGap = 4;    // 숫자 라벨과 색상 사이 간격
+    constexpr int kCellGap = 14;     // 칸과 칸 사이 간격
+    constexpr int kRowHeight = 20;
+    constexpr int kLeftMargin = 12;
+
+    CFont font_num;
+    font_num.CreateFont(15, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH, _T("맑은 고딕"));
+    CFont* old_font = dc->SelectObject(&font_num);
+    dc->SetBkMode(TRANSPARENT);
+    dc->SetTextColor(kColorMuted);
+
+    // "13 :" 처럼 가장 넓은 라벨 기준으로 칸 폭과 열 개수를 계산
+    CSize max_label_size = dc->GetTextExtent(_T("13 :"));
+    int cell_width = max_label_size.cx + kSwatchGap + kSwatchSize + kCellGap;
+    int usable_width = width - kLeftMargin * 2;
+    int cols = max(1, usable_width / cell_width);
+    int rows = (kLevelCount + cols - 1) / cols;
+
+    for (int depth = 0; depth < kLevelCount; ++depth) {
+        int col = depth % cols;
+        int row = depth / cols;
+        int x = kLeftMargin + col * cell_width;
+        int row_y = y + row * kRowHeight;
+
+        CString label;
+        label.Format(_T("%d :"), depth);
+        dc->TextOut(x, row_y, label);
+
+        CRect swatch_rect(
+            x + max_label_size.cx + kSwatchGap, row_y + 2,
+            x + max_label_size.cx + kSwatchGap + kSwatchSize, row_y + 2 + kSwatchSize);
+        dc->FillSolidRect(&swatch_rect, kLevelColorsRGB[depth]);
+    }
+
+    dc->SelectObject(old_font);
+    y += rows * kRowHeight + 4;
 }
 
 void CInspectorWnd::UpdateStats(int32_t visible_count, int32_t total_count, float fps) {
@@ -234,5 +325,15 @@ void CInspectorWnd::OnToggleEdgesClicked() {
 
     if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
         view->SetShowEdges(m_showEdges);
+    }
+}
+
+void CInspectorWnd::OnToggleOutlineClicked() {
+    m_showObjectOutline = !m_showObjectOutline;
+    m_toggleOutlineButton.SetWindowText(
+        m_showObjectOutline ? _T("객체 테두리: ON") : _T("객체 테두리: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowObjectOutline(m_showObjectOutline);
     }
 }

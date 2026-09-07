@@ -28,6 +28,7 @@ public:
 	void SetShowObjectBounds(bool show);
 	void SetShow3D(bool show);
 	void SetShowEdges(bool show);
+	void SetShowObjectOutline(bool show);
 
 // 재정의입니다.
 public:

@@ -17,6 +17,7 @@
 #define new DEBUG_NEW
 #endif
 #include <parse/ShpDataset.h>
+#include <algorithm>
 
 namespace {
 	constexpr int kInspectorWidth = 220;
@@ -43,6 +44,35 @@ struct QuadTreeStats {
 	int32_t total_object_count = 0;
 	int32_t objects_per_depth[kMaxQuadTreeDepth + 1] = {};
 };
+
+struct ObjectSizeStats {
+	float min_width = FLT_MAX;
+	float min_depth = FLT_MAX;
+	std::vector<float> widths;
+	std::vector<float> depths;
+};
+
+void CollectObjectSizeStats(const ShpDataset& dataset, ObjectSizeStats* out_stats) {
+	out_stats->widths.reserve(dataset.records.size());
+	out_stats->depths.reserve(dataset.records.size());
+
+	for (const ShpPolygonRecord& record : dataset.records) {
+		float width = record.bounds_max.x - record.bounds_min.x;
+		float depth = record.bounds_max.z - record.bounds_min.z;
+		out_stats->widths.push_back(width);
+		out_stats->depths.push_back(depth);
+		out_stats->min_width = min(out_stats->min_width, width);
+		out_stats->min_depth = min(out_stats->min_depth, depth);
+	}
+}
+
+// p: 0.0~1.0 (0.01 = 하위 1%)
+float Percentile(std::vector<float> values, float p) {
+	std::sort(values.begin(), values.end());
+	size_t index = static_cast<size_t>(values.size() * p);
+	if (index >= values.size()) index = values.size() - 1;
+	return values[index];
+}
 
 void CollectQuadTreeStats(const QuadTreeNode* node, int32_t depth, QuadTreeStats* out_stats) {
 	if (node == nullptr) {
@@ -235,6 +265,42 @@ void CShpViewerView::OnUpdate(CView* /*pSender*/, LPARAM /*lHint*/, CObject* /*p
 				depth_msg.Format(_T("  depth %d: %d objects\n"), d, stats.objects_per_depth[d]);
 				OutputDebugString(depth_msg);
 			}
+
+			// 리프(depth 13) 타이트 셀 크기 — 루트 bounds에서 바로 계산
+			const QuadBounds& root_bounds = pDoc->m_dataset.quad_tree->tight_bounds;
+			float root_width = root_bounds.max_x - root_bounds.min_x;
+			float root_depth = root_bounds.max_z - root_bounds.min_z;
+			float leaf_width = root_width / static_cast<float>(1 << kMaxQuadTreeDepth);
+			float leaf_depth = root_depth / static_cast<float>(1 << kMaxQuadTreeDepth);
+
+			CString leaf_msg;
+			leaf_msg.Format(_T("leaf(depth %d) tight size: width=%.3f, depth=%.3f\n"),
+				kMaxQuadTreeDepth, leaf_width, leaf_depth);
+			OutputDebugString(leaf_msg);
+
+			// 객체 크기 분포
+			ObjectSizeStats size_stats;
+			CollectObjectSizeStats(pDoc->m_dataset, &size_stats);
+
+			CString width_msg;
+			width_msg.Format(_T("object width: min=%.3f, p1=%.3f, p5=%.3f, p10=%.3f, p20=%.3f, p50=%.3f\n"),
+				size_stats.min_width,
+				Percentile(size_stats.widths, 0.01f),
+				Percentile(size_stats.widths, 0.05f),
+				Percentile(size_stats.widths, 0.10f),
+				Percentile(size_stats.widths, 0.20f),
+				Percentile(size_stats.widths, 0.50f));
+			OutputDebugString(width_msg);
+
+			CString depth_msg2;
+			depth_msg2.Format(_T("object depth: min=%.3f, p1=%.3f, p5=%.3f, p10=%.3f, p20=%.3f, p50=%.3f\n"),
+				size_stats.min_depth,
+				Percentile(size_stats.depths, 0.01f),
+				Percentile(size_stats.depths, 0.05f),
+				Percentile(size_stats.depths, 0.10f),
+				Percentile(size_stats.depths, 0.20f),
+				Percentile(size_stats.depths, 0.50f));
+			OutputDebugString(depth_msg2);
 		}
 	}
 	m_glView.Invalidate();
@@ -270,4 +336,8 @@ void CShpViewerView::SetShow3D(bool show) {
 
 void CShpViewerView::SetShowEdges(bool show) {
 	m_glView.SetShowEdges(show);
+}
+
+void CShpViewerView::SetShowObjectOutline(bool show) {
+	m_glView.SetShowObjectOutline(show);
 }

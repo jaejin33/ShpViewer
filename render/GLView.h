@@ -54,6 +54,7 @@ public:
     void SetShowObjectBounds(bool show);
     void SetShow3D(bool show);
     void SetShowEdges(bool show);
+    void SetShowObjectOutline(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -84,10 +85,11 @@ protected:
     bool m_showAllObjectLevelColors = false;
     bool m_showAllNodes = false;
     bool m_showQuadTreeLevels = false;
-    bool m_showFill = true;
+    bool m_showFill = false;
     bool m_showObjectBounds = false;
     bool m_show3D = true;
     bool m_showEdges = true;
+    bool m_showObjectOutline = false;
     GLuint m_nodeBoxVertexBuffer = 0;
     GLuint m_objectBoxVertexBuffer = 0;
 

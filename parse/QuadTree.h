@@ -32,7 +32,7 @@ struct NodeDebugInfo {
 	int32_t depth = 0;
 };
 
-constexpr float kDefaultLoosenessFactor = 2.0f;
+constexpr float kLoosenessFactor = 2.0f;
 constexpr int32_t kMaxQuadTreeDepth = 13;
 
 // tight_bounds 중심점 기준으로 (center_x, center_z)가 4분면 중 몇 번인지 반환.
