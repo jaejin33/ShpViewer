@@ -19,19 +19,37 @@ namespace mapbox {
 } }
 
 namespace {
-    float ComputeRingArea(const std::vector<Vec3>& ring) {
-        float area = 0.0f;
+    //float ComputeRingArea(const std::vector<Vec3>& ring) {
+    //    float area = 0.0f;
+    //    size_t n = ring.size();
+    //    Vec3 origin = ring[0];   // 정밀도 확보용 기준점 — 결과인 넓이 값 자체엔 영향 없음
+    //    for (size_t i = 0; i < n; ++i) {
+    //        size_t j = (i + 1) % n;
+    //        area += ring[i].x * ring[j].z - ring[j].x * ring[i].z;
+    //    }
+    //    return area * 0.5f;
+    //    //for (size_t i = 0; i < n; ++i) {
+    //    //    size_t j = (i + 1) % n;
+    //    //    float xi = ring[i].x - origin.x;
+    //    //    float zi = ring[i].z - origin.z;
+    //    //    float xj = ring[j].x - origin.x;
+    //    //    float zj = ring[j].z - origin.z;
+    //    //    area += xi * zj - xj * zi;
+    //    //}
+    //    //return area * 0.5f;
+    //}
+    double ComputeRingArea(const std::vector<Vec3>& ring) {
+        double area = 0.0;
         size_t n = ring.size();
-        Vec3 origin = ring[0];   // 정밀도 확보용 기준점 — 결과인 넓이 값 자체엔 영향 없음
         for (size_t i = 0; i < n; ++i) {
             size_t j = (i + 1) % n;
-            float xi = ring[i].x - origin.x;
-            float zi = ring[i].z - origin.z;
-            float xj = ring[j].x - origin.x;
-            float zj = ring[j].z - origin.z;
+            double xi = static_cast<double>(ring[i].x);
+            double zi = static_cast<double>(ring[i].z);
+            double xj = static_cast<double>(ring[j].x);
+            double zj = static_cast<double>(ring[j].z);
             area += xi * zj - xj * zi;
         }
-        return area * 0.5f;
+        return area * 0.5;
     }
 }
 
@@ -60,9 +78,9 @@ namespace {
     constexpr float kZoomFactor = 0.95f;
     constexpr float kMaxDrawDistance = 3200.0f;
     constexpr float kMaxDrawDistanceSquared = kMaxDrawDistance * kMaxDrawDistance;
-    constexpr float kNodeMinSizeToDistanceRatio = 0.014f;     // 노드용 
+    constexpr float kNodeMinSizeToDistanceRatio = 0.025f;     // 노드용 
     constexpr float kNodeMinSizeToDistanceRatioSquared = kNodeMinSizeToDistanceRatio * kNodeMinSizeToDistanceRatio;
-    constexpr float kObjectMinSizeToDistanceRatio = 0.03f;    // 객체용
+    constexpr float kObjectMinSizeToDistanceRatio = 0.025f;    // 객체용
     constexpr float kObjectMinSizeToDistanceRatioSquared = kObjectMinSizeToDistanceRatio * kObjectMinSizeToDistanceRatio;
     constexpr float kLevelColors[14][4] = {
         {0.60f, 0.26f, 0.38f, 1.0f},  // depth 0
@@ -523,7 +541,7 @@ void CGLView::SetDataset(const ShpDataset* dataset) {
         Vec3 center = (m_pDataset->header.world_bbox_min + m_pDataset->header.world_bbox_max) * 0.5f;
         Vec3 extent = m_pDataset->header.world_bbox_max - m_pDataset->header.world_bbox_min;
         float max_extent = (extent.x > extent.z) ? extent.x : extent.z;
-        m_camera.Recenter(center, max_extent);
+        m_camera.Recenter(center, max_extent * 0.05f);
     }
     BuildDebugGeometry();
 }
@@ -559,13 +577,31 @@ void CGLView::BuildDebugGeometry() {
 
         int32_t outer_part_index = 0;
         float max_area = 0.0f;
+
+        //if (part_count >= 2) {
+        //    CString msg;
+        //    msg.Format(_T("[Record %d] part_count=%d\n"), i, part_count);
+        //    OutputDebugString(msg);
+        //}
         for (int32_t p = 0; p < part_count; ++p) {
             float area = std::fabs(ComputeRingArea(all_parts[p]));
+
+            //if (part_count >= 2) {
+            //    CString msg;
+            //    msg.Format(_T("  part[%d] area=%f\n"), p, area);
+            //    OutputDebugString(msg);
+            //}
             if (area > max_area) {
                 max_area = area;
                 outer_part_index = p;
             }
         }
+
+        //if (part_count >= 2) {
+        //    CString msg;
+        //    msg.Format(_T("  -> outer_part_index=%d\n"), outer_part_index);
+        //    OutputDebugString(msg);
+        //}
 
         std::vector<std::vector<Vec3>> rings;
         rings.push_back(all_parts[outer_part_index]);
@@ -664,17 +700,17 @@ void CGLView::BuildDebugGeometry() {
             }
         }
 
-        if (part_count > 1) {
-            CString debug_msg;
-            debug_msg.Format(_T("record %d: part_count=%d\n"), i, part_count);
-            OutputDebugString(debug_msg);
-            for (int32_t k = 0; k < static_cast<int32_t>(record.points.size()) && k < 5; ++k) {
-                CString point_msg;
-                point_msg.Format(_T("  point[%d] = (%.2f, %.2f, %.2f)\n"),
-                    k, record.points[k].x, record.points[k].y, record.points[k].z);
-                OutputDebugString(point_msg);
-            }
-        }
+        //if (part_count > 1) {
+        //    CString debug_msg;
+        //    debug_msg.Format(_T("record %d: part_count=%d\n"), i, part_count);
+        //    OutputDebugString(debug_msg);
+        //    for (int32_t k = 0; k < static_cast<int32_t>(record.points.size()) && k < 5; ++k) {
+        //        CString point_msg;
+        //        point_msg.Format(_T("  point[%d] = (%.2f, %.2f, %.2f)\n"),
+        //            k, record.points[k].x, record.points[k].y, record.points[k].z);
+        //        OutputDebugString(point_msg);
+        //    }
+        //}
 
         record_range.range_count = static_cast<int32_t>(m_drawRanges.size()) - record_range.first_range_index;
         m_recordRanges.push_back(record_range);
