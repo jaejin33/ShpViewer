@@ -74,33 +74,31 @@ CGLView::~CGLView() { Cleanup(); }
 namespace {
     constexpr float kCameraFovRadians = 0.7853982f;
     constexpr float kCameraNearPlane = 5.0f;
-    constexpr float kCameraFarPlane = 4000.0f;
+    constexpr float kCameraFarPlane = 100000.0f;
     constexpr float kZoomFactor = 0.95f;
     constexpr float kMaxDrawDistance = 3200.0f;
     constexpr float kMaxDrawDistanceSquared = kMaxDrawDistance * kMaxDrawDistance;
-    constexpr float kNodeMinSizeToDistanceRatio = 0.025f;     // 노드용 
+    constexpr float kNodeMinSizeToDistanceRatio = 0.04f;     // 노드용 
     constexpr float kNodeMinSizeToDistanceRatioSquared = kNodeMinSizeToDistanceRatio * kNodeMinSizeToDistanceRatio;
-    constexpr float kObjectMinSizeToDistanceRatio = 0.025f;    // 객체용
+    constexpr float kObjectMinSizeToDistanceRatio = 0.04f;    // 객체용
     constexpr float kObjectMinSizeToDistanceRatioSquared = kObjectMinSizeToDistanceRatio * kObjectMinSizeToDistanceRatio;
-    constexpr float kLevelColors[14][4] = {
+    constexpr float kLevelColors[11][4] = {
         {0.60f, 0.26f, 0.38f, 1.0f},  // depth 0
         {0.23f, 0.67f, 0.09f, 1.0f},  // depth 1
         {0.01f, 0.25f, 1.00f, 1.0f},  // depth 2
         {0.16f, 0.61f, 0.80f, 1.0f},  // depth 3
-        {0.58f, 0.44f, 0.99f, 1.0f},  // depth 4
-        {0.36f, 0.42f, 0.00f, 1.0f},  // depth 5
-        {0.64f, 0.36f, 1.00f, 1.0f},  // depth 6
-        {0.19f, 0.16f, 0.98f, 1.0f},  // depth 7
-        {0.00f, 0.51f, 1.00f, 1.0f},  // depth 8  - 조정됨 (하늘색 쪽으로)
-        {0.18f, 0.82f, 0.75f, 1.0f},  // depth 9
-        {0.06f, 0.61f, 0.00f, 1.0f},  // depth 10 - 그대로 반영
-        {0.90f, 0.84f, 0.24f, 1.0f},  // depth 11
-        {0.95f, 0.51f, 0.23f, 1.0f},  // depth 12
-        {0.98f, 0.07f, 0.07f, 1.0f},  // depth 13
+        {0.64f, 0.36f, 1.00f, 1.0f},  // depth 4
+        {0.19f, 0.16f, 0.98f, 1.0f},  // depth 5
+        {0.00f, 0.51f, 1.00f, 1.0f},  // depth 6  
+        {0.18f, 0.82f, 0.75f, 1.0f},  // depth 7
+        {0.06f, 0.61f, 0.00f, 1.0f},  // depth 8 
+        {0.90f, 0.84f, 0.24f, 1.0f},  // depth 9
+        {0.95f, 0.51f, 0.23f, 1.0f},  // depth 10
     };
-    constexpr int32_t kLevelColorCount = 14;
+    constexpr int32_t kLevelColorCount = 11;
     constexpr float kPlaceholderBuildingHeight = 10.0f;
     constexpr float kWallBottomShade = 0.6f;
+    constexpr float kFpsUpdateIntervalSeconds = 0.5;
 
     struct ExtrudeVertex {
         Vec3 position;
@@ -168,6 +166,7 @@ BOOL CGLView::InitEGL()
     glGenBuffers(1, &m_extrudeVertexBuffer);
     glGenBuffers(1, &m_extrudeIndexBuffer);
     glGenBuffers(1, &m_edgeVertexBuffer);
+    glGenBuffers(1, &m_fillWireIndexBuffer);
     return TRUE;
 }
 
@@ -231,7 +230,7 @@ void CGLView::Render()
         m_fpsAccumulatedSeconds += frame_seconds;
         ++m_fpsFrameCount;
 
-        if (m_fpsAccumulatedSeconds >= 1.0) {
+        if (m_fpsAccumulatedSeconds >= kFpsUpdateIntervalSeconds) {
             m_fps = static_cast<float>(m_fpsFrameCount / m_fpsAccumulatedSeconds);
             m_fpsFrameCount = 0;
             m_fpsAccumulatedSeconds = 0.0;
@@ -274,6 +273,10 @@ void CGLView::Render()
         std::vector<NodeDebugInfo> visible_nodes;
         std::vector<int32_t> filled_candidates;
 
+#ifdef ENABLE_CULLING_STATS
+        g_cullingStats = CullingStats{};   // 이번 프레임 측정을 위해 초기화
+#endif
+
         // ── 6. 쿼드트리 broad-phase 쿼리 (컬링 1단계) ──
         QueryVisibleObjects(
             m_pDataset->quad_tree.get(),
@@ -297,29 +300,44 @@ void CGLView::Render()
             int32_t candidate_index = candidate_indices[i];
             const RecordRange& record_range = m_recordRanges[candidate_index];
 
+#ifdef ENABLE_CULLING_STATS
+            g_cullingStats.narrow_phase_tested++;
+#endif
+
             if (!IsBoxInsideFrustum(planes, record_range.bounds_min, record_range.bounds_max)) {
+#ifdef ENABLE_CULLING_STATS
+                g_cullingStats.narrow_phase_culled_frustum++;
+#endif
                 continue;  // 프러스텀 재검사
             }
 
             Vec3 camera_eye = m_camera.GetEye();
-            float closest_x = std::clamp(camera_eye.x, record_range.bounds_min.x, record_range.bounds_max.x);
-            float closest_z = std::clamp(camera_eye.z, record_range.bounds_min.z, record_range.bounds_max.z);
-            Vec3 closest_point(closest_x, 0.0f, closest_z);
-            float distance_sq = Vec3LengthSquared(closest_point - camera_eye);
+            float center_x = (record_range.bounds_min.x + record_range.bounds_max.x) * 0.5f;
+            float center_y = (record_range.bounds_min.y + record_range.bounds_max.y) * 0.5f;
+            float center_z = (record_range.bounds_min.z + record_range.bounds_max.z) * 0.5f;
+            Vec3 center_point(center_x, center_y, center_z);
+            float distance_sq = Vec3LengthSquared(center_point - camera_eye);
 
-            if (distance_sq > kMaxDrawDistanceSquared) {
-                continue;  // draw distance 컷
-            }
+            //if (distance_sq > kMaxDrawDistanceSquared) {
+            //    continue;  // draw distance 컷
+            //}
 
             float width = record_range.bounds_max.x - record_range.bounds_min.x;
             float depth = record_range.bounds_max.z - record_range.bounds_min.z;
-            float object_size_sq = width * depth;
+            float height = record_range.bounds_max.y;
+            float object_size_sq = width * width + depth * depth + height * height;
 
             if (object_size_sq < kObjectMinSizeToDistanceRatioSquared * distance_sq) {
+#ifdef ENABLE_CULLING_STATS
+                g_cullingStats.narrow_phase_culled_size_distance++;
+#endif
                 continue;  // 객체 size/distance
             }
 
             ++visible_count;
+#ifdef ENABLE_CULLING_STATS
+            g_cullingStats.objects_drawn++;
+#endif
 
             // (디버그) 쿼드트리 깊이별 색상
             if (m_showAllObjectLevelColors && i < candidate_depths.size()) {
@@ -345,6 +363,18 @@ void CGLView::Render()
                 glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 흰색으로 복구
             }
         }
+#ifdef ENABLE_CULLING_STATS
+        {
+            char buf[512];
+            sprintf_s(buf,
+                "[CullingStats] nodes_visited=%d culled_frustum=%d culled_size_dist=%d | "
+                "narrow_tested=%d narrow_culled_frustum=%d narrow_culled_size_dist=%d objects_drawn=%d\n",
+                g_cullingStats.nodes_visited, g_cullingStats.nodes_culled_frustum, g_cullingStats.nodes_culled_size_distance,
+                g_cullingStats.narrow_phase_tested, g_cullingStats.narrow_phase_culled_frustum,
+                g_cullingStats.narrow_phase_culled_size_distance, g_cullingStats.objects_drawn);
+            OutputDebugStringA(buf);
+        }
+#endif
 
         // ── 8. 채우기(fill) 그리기 — 
         if (m_showFill && !filled_candidates.empty()) {
@@ -370,6 +400,21 @@ void CGLView::Render()
 
             if (m_showAllObjectLevelColors) {
                 glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 흰색으로 복구
+            }
+        }
+
+        if (m_showTriangulationLines && !filled_candidates.empty()) {
+            glDisableVertexAttribArray(1);
+            glVertexAttrib1f(1, 1.0f);
+            glBindBuffer(GL_ARRAY_BUFFER, m_fillVertexBuffer);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_fillWireIndexBuffer);
+
+            for (size_t j = 0; j < filled_candidates.size(); ++j) {
+                int32_t idx = filled_candidates[j];
+                const FillRange& wire_range = m_fillWireRanges[idx];
+                glDrawElements(GL_LINES, wire_range.index_count, GL_UNSIGNED_INT,
+                    (void*)(wire_range.first_index * sizeof(uint32_t)));
             }
         }
 
@@ -431,8 +476,16 @@ void CGLView::Render()
             / static_cast<float>(freq.QuadPart);
 
         CString debug_msg;
+#ifdef ENABLE_CULLING_STATS
+        Vec3 cam_target = m_camera.GetTarget();
+        debug_msg.Format(_T("candidate_count=%d, visible_count=%d, draw_call_count=%d, elapsed_ms=%.2f | camera target=(%.4f, %.4f, %.4f) distance=%.4f yaw=%.6f pitch=%.6f\n"),
+            candidate_count, visible_count, draw_call_count, elapsed_ms,
+            cam_target.x, cam_target.y, cam_target.z,
+            m_camera.GetDistance(), m_camera.GetYaw(), m_camera.GetPitch());
+#else
         debug_msg.Format(_T("candidate_count=%d, visible_count=%d, draw_call_count=%d, elapsed_ms=%.2f\n"),
             candidate_count, visible_count, draw_call_count, elapsed_ms);
+#endif
         OutputDebugString(debug_msg);
     }
 
@@ -535,6 +588,10 @@ void CGLView::SetShowObjectOutline(bool show) {
     m_showObjectOutline = show;
 }
 
+void CGLView::SetShowTriangulationLines(bool show) {
+    m_showTriangulationLines = show;
+}
+
 void CGLView::SetDataset(const ShpDataset* dataset) {
     m_pDataset = dataset;
     if (m_pDataset) {
@@ -542,6 +599,13 @@ void CGLView::SetDataset(const ShpDataset* dataset) {
         Vec3 extent = m_pDataset->header.world_bbox_max - m_pDataset->header.world_bbox_min;
         float max_extent = (extent.x > extent.z) ? extent.x : extent.z;
         m_camera.Recenter(center, max_extent * 0.05f);
+#ifdef ENABLE_CULLING_STATS
+        // 진단용: 배율 비교 실험 동안은 항상 이 시점으로 강제 고정
+        //m_camera = Camera(center, max_extent * 0.05f, 0.0f, 1.55f);
+        // 원하는 구도가 따로 있으면 위 줄 대신 이렇게 직접 값을 박아도 됩니다:
+        // m_camera = Camera(Vec3(원하는_x, 0.0f, 원하는_z), 원하는_distance, 원하는_yaw_라디안, 원하는_pitch_라디안);
+        m_camera = Camera(Vec3(388561.4375, 0.0000, -290364.6250), 1054.2139, -0.07, 0.310001);
+#endif
     }
     BuildDebugGeometry();
 }
@@ -550,6 +614,7 @@ void CGLView::BuildDebugGeometry() {
     m_drawRanges.clear();
     m_recordRanges.clear();
     m_fillRanges.clear();
+    m_fillWireRanges.clear();
     if (!m_pDataset) return;
 
     std::vector<Vec3> vertices;
@@ -558,6 +623,7 @@ void CGLView::BuildDebugGeometry() {
     std::vector<ExtrudeVertex> extrude_vertices;
     std::vector<uint32_t> extrude_indices;
     std::vector<Vec3> edge_vertices;
+    std::vector<uint32_t> fill_wire_indices;
 
     int32_t record_count = static_cast<int32_t>(m_pDataset->records.size());
 
@@ -576,39 +642,54 @@ void CGLView::BuildDebugGeometry() {
         }
 
         int32_t outer_part_index = 0;
-        float max_area = 0.0f;
+        std::vector<int32_t> hole_part_indices;
 
-        //if (part_count >= 2) {
-        //    CString msg;
-        //    msg.Format(_T("[Record %d] part_count=%d\n"), i, part_count);
-        //    OutputDebugString(msg);
-        //}
-        for (int32_t p = 0; p < part_count; ++p) {
-            float area = std::fabs(ComputeRingArea(all_parts[p]));
+        if (part_count > 1) {
+            // 크기(절댓값) 비교 없이 부호만으로 역할을 정함: 넓이가 양수면 외곽, 음수(또는 0)면 홀
+            std::vector<int32_t> outer_candidate_indices;
+            for (int32_t p = 0; p < part_count; ++p) {
+                double area = ComputeRingArea(all_parts[p]);
+                bool is_outer_candidate = (area > 0.0);
+                CString msg;
+                msg.Format(_T("[Record %d] part[%d] area=%f%s\n"),
+                    i, p, area, is_outer_candidate ? _T(" <- 외곽(양수)") : _T(" <- 홀(음수)"));
+                OutputDebugString(msg);
+                if (is_outer_candidate) {
+                    outer_candidate_indices.push_back(p);
+                }
+            }
 
-            //if (part_count >= 2) {
-            //    CString msg;
-            //    msg.Format(_T("  part[%d] area=%f\n"), p, area);
-            //    OutputDebugString(msg);
-            //}
-            if (area > max_area) {
-                max_area = area;
-                outer_part_index = p;
+            if (outer_candidate_indices.empty()) {
+                // 양수 파트가 하나도 없음 — part[0]을 임시 외곽으로 사용
+                CString msg;
+                msg.Format(_T("[Record %d] 데이터 오류: 외곽(양수) 파트가 하나도 없음 — part[0]을 임시 외곽으로 사용\n"), i);
+                OutputDebugString(msg);
+                outer_part_index = 0;
+            }
+            else {
+                outer_part_index = outer_candidate_indices[0];
+                if (outer_candidate_indices.size() > 1) {
+                    // 외곽(양수) 파트가 둘 이상 — 레코드 안에 서로 다른 건물이 섞여 있는데
+                    // 그중 일부가 반대 방향으로 감겨서 부호가 갈린 것으로 추정됨 → 건물 데이터 오류로 처리
+                    CString msg;
+                    msg.Format(_T("[Record %d] 데이터 오류: 외곽(양수) 파트가 %zu개 있음 — 서로 다른 건물이 반대 방향으로 감겨있을 가능성. part[%d]만 외곽으로 쓰고 나머지는 전부 홀로 처리함\n"),
+                        i, outer_candidate_indices.size(), outer_part_index);
+                    OutputDebugString(msg);
+                }
+            }
+
+            // 외곽으로 뽑히지 않은 나머지 파트는 전부 홀로 처리
+            for (int32_t p = 0; p < part_count; ++p) {
+                if (p == outer_part_index) continue;
+                hole_part_indices.push_back(p);
             }
         }
-
-        //if (part_count >= 2) {
-        //    CString msg;
-        //    msg.Format(_T("  -> outer_part_index=%d\n"), outer_part_index);
-        //    OutputDebugString(msg);
-        //}
+        // part_count == 1이면 outer_part_index는 처음 값(0) 그대로 사용 — 부호 검사 자체를 안 함
 
         std::vector<std::vector<Vec3>> rings;
         rings.push_back(all_parts[outer_part_index]);
-        for (int32_t p = 0; p < part_count; ++p) {
-            if (p != outer_part_index) {
-                rings.push_back(all_parts[p]);
-            }
+        for (int32_t hole_index : hole_part_indices) {
+            rings.push_back(all_parts[hole_index]);
         }
 
         std::vector<uint32_t> tri_indices = mapbox::earcut<uint32_t>(rings);
@@ -628,6 +709,19 @@ void CGLView::BuildDebugGeometry() {
         }
 
         m_fillRanges.push_back(fill_range);
+
+        FillRange wire_range;
+        wire_range.first_index = static_cast<GLint>(fill_wire_indices.size());
+        for (size_t t = 0; t + 2 < tri_indices.size(); t += 3) {
+            uint32_t a = vertex_offset + tri_indices[t];
+            uint32_t b = vertex_offset + tri_indices[t + 1];
+            uint32_t c = vertex_offset + tri_indices[t + 2];
+            fill_wire_indices.push_back(a); fill_wire_indices.push_back(b);
+            fill_wire_indices.push_back(b); fill_wire_indices.push_back(c);
+            fill_wire_indices.push_back(c); fill_wire_indices.push_back(a);
+        }
+        wire_range.index_count = static_cast<GLsizei>(fill_wire_indices.size() - wire_range.first_index);
+        m_fillWireRanges.push_back(wire_range);
 
         ExtrudeRange extrude_range;
         extrude_range.first_index = static_cast<GLint>(extrude_indices.size());
@@ -733,6 +827,9 @@ void CGLView::BuildDebugGeometry() {
 
     glBindBuffer(GL_ARRAY_BUFFER, m_edgeVertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, edge_vertices.size() * sizeof(Vec3), edge_vertices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_fillWireIndexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, fill_wire_indices.size() * sizeof(uint32_t), fill_wire_indices.data(), GL_STATIC_DRAW);
 }
 
 void CGLView::Cleanup()

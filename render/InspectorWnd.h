@@ -11,6 +11,7 @@ namespace {
     constexpr int kToggle3DButtonId = 2006;
     constexpr int kToggleEdgesButtonId = 2007;
     constexpr int kToggleOutlineButtonId = 2008;
+    constexpr int kToggleTriangulationLinesButtonId = 2009;
 }
 
 class CInspectorWnd : public CWnd
@@ -22,7 +23,7 @@ public:
     BOOL Create(CWnd* parent_wnd);
     void UpdateStats(int32_t visible_count, int32_t total_count, float fps);
     void DrawLevel(CDC* dc, int& y, int width);
-    void LayoutButtons(int start_y);
+    int LayoutButtons(int start_y);
 
 protected:
     int32_t m_visibleCount = 0;
@@ -38,6 +39,7 @@ protected:
     CButton m_toggle3DButton;
     CButton m_toggleEdgesButton;
     CButton m_toggleOutlineButton;
+    CButton m_toggleTriangulationLinesButton;
     bool m_showFill = false;
     bool m_showQuadTreeLevels = false;
     bool m_showAllNodes = false;
@@ -46,6 +48,7 @@ protected:
     bool m_show3D = true;
     bool m_showEdges = true;
     bool m_showObjectOutline = false;
+    bool m_showTriangulationLines = false;
 
     void DrawSection(CDC* dc, int& y, LPCTSTR title, COLORREF color, int width, CFont* font);
     void DrawRow(CDC* dc, int& y, LPCTSTR label, const CString& value, COLORREF value_color, int width);
@@ -61,4 +64,5 @@ protected:
     afx_msg void OnToggle3DClicked();
     afx_msg void OnToggleEdgesClicked();
     afx_msg void OnToggleOutlineClicked();
+    afx_msg void OnToggleTriangulationLinesClicked();
 };

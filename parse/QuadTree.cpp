@@ -2,6 +2,10 @@
 #include "QuadTree.h"
 #include <algorithm>
 
+#ifdef ENABLE_CULLING_STATS
+CullingStats g_cullingStats;
+#endif
+
 void InsertObject(QuadTreeNode* node, int32_t object_index, const QuadBounds& object_bounds, int32_t depth) {
 	if (depth >= kMaxQuadTreeDepth) {
 		node->object_indices.push_back(object_index);
@@ -145,27 +149,33 @@ void QueryVisibleObjects(
 		return;
 	}
 
-	Vec3 loose_min(node->loose_bounds.min_x, 0.0f, node->loose_bounds.min_z);
-	Vec3 loose_max(node->loose_bounds.max_x, 0.0f, node->loose_bounds.max_z);
+#ifdef ENABLE_CULLING_STATS
+	g_cullingStats.nodes_visited++;
+#endif
 
-	if (!IsBoxInsideFrustum(planes, loose_min, loose_max)) {
+	Vec3 bounds_min(node->loose_bounds.min_x, 0.0f, node->loose_bounds.min_z);
+	Vec3 bounds_max(node->loose_bounds.max_x, 0.0f, node->loose_bounds.max_z);
+
+	if (!IsBoxInsideFrustum(planes, bounds_min, bounds_max)) {
+#ifdef ENABLE_CULLING_STATS
+		g_cullingStats.nodes_culled_frustum++;
+#endif
 		return;
 	}
 	
-	float closest_x = std::clamp(camera_eye.x, node->loose_bounds.min_x, node->loose_bounds.max_x);
-	float closest_z = std::clamp(camera_eye.z, node->loose_bounds.min_z, node->loose_bounds.max_z);
-	Vec3 closest_point(closest_x, 0.0f, closest_z);
+	float center_x = (node->tight_bounds.min_x + node->tight_bounds.max_x) * 0.5f;
+	float center_z = (node->tight_bounds.min_z + node->tight_bounds.max_z) * 0.5f;
+	Vec3 closest_point(center_x, 0.0f, center_z);
 	float distance_sq = Vec3LengthSquared(closest_point - camera_eye);
 
-	if (distance_sq > max_draw_distance_squared) {
-		return;  // 이 노드 전체가 draw distance 밖 -> 서브트리 통째로 스킵
-	}
-
-	float node_width = node->loose_bounds.max_x - node->loose_bounds.min_x;
-	float node_depth = node->loose_bounds.max_z - node->loose_bounds.min_z;
-	float node_size_sq = node_width * node_depth;
+	float node_width = node->tight_bounds.max_x - node->tight_bounds.min_x;
+	float node_depth = node->tight_bounds.max_z - node->tight_bounds.min_z;
+	float node_size_sq = node_width * node_width + node_depth * node_depth;
 
 	if (node_size_sq < min_size_to_distance_ratio_squared * distance_sq) {
+#ifdef ENABLE_CULLING_STATS
+		g_cullingStats.nodes_culled_size_distance++;
+#endif
 		return;   // 이 영역 자체가 화면에서 너무 작음 -> 서브트리 스킵
 	}
 

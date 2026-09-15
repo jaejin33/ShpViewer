@@ -341,3 +341,7 @@ void CShpViewerView::SetShowEdges(bool show) {
 void CShpViewerView::SetShowObjectOutline(bool show) {
 	m_glView.SetShowObjectOutline(show);
 }
+
+void CShpViewerView::SetShowTriangulationLines(bool show) {
+	m_glView.SetShowTriangulationLines(show);
+}

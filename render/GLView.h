@@ -55,6 +55,7 @@ public:
     void SetShow3D(bool show);
     void SetShowEdges(bool show);
     void SetShowObjectOutline(bool show);
+    void SetShowTriangulationLines(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -81,6 +82,7 @@ protected:
     std::vector<ExtrudeRange> m_extrudeRanges;
     GLuint m_edgeVertexBuffer = 0;
     std::vector<EdgeRange> m_edgeRanges;
+    std::vector<FillRange> m_fillWireRanges;
 
     bool m_showAllObjectLevelColors = false;
     bool m_showAllNodes = false;
@@ -90,6 +92,8 @@ protected:
     bool m_show3D = true;
     bool m_showEdges = true;
     bool m_showObjectOutline = false;
+    bool m_showTriangulationLines = false;
+    GLuint m_fillWireIndexBuffer = 0;
     GLuint m_nodeBoxVertexBuffer = 0;
     GLuint m_objectBoxVertexBuffer = 0;
 

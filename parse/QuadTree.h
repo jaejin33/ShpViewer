@@ -1,5 +1,18 @@
 #pragma once
 
+#ifdef ENABLE_CULLING_STATS
+struct CullingStats {
+	int nodes_visited = 0;
+	int nodes_culled_frustum = 0;
+	int nodes_culled_size_distance = 0;
+	int narrow_phase_tested = 0;
+	int narrow_phase_culled_frustum = 0;
+	int narrow_phase_culled_size_distance = 0;
+	int objects_drawn = 0;
+};
+extern CullingStats g_cullingStats;
+#endif
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -32,8 +45,8 @@ struct NodeDebugInfo {
 	int32_t depth = 0;
 };
 
-constexpr float kLoosenessFactor = 2.0f;
-constexpr int32_t kMaxQuadTreeDepth = 13;
+constexpr float kLoosenessFactor = 1.6f;
+constexpr int32_t kMaxQuadTreeDepth = 10;
 
 // tight_bounds 중심점 기준으로 (center_x, center_z)가 4분면 중 몇 번인지 반환.
 QuadChildIndex SelectChildIndex(const QuadBounds& tight_bounds, float center_x, float center_z);

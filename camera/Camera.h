@@ -24,6 +24,12 @@ public:
 
     void Zoom(float scale_factor);
 
+#ifdef ENABLE_CULLING_STATS
+    float GetDistance() const { return distance_; }
+    float GetYaw() const { return yaw_; }
+    float GetPitch() const { return pitch_; }
+#endif
+
 private:
     // target_/distance_/yaw_/pitch_로부터 eye_를 다시 계산해서 캐시한다.
     // Rotate()/Pan()이 값을 바꾼 뒤에는 반드시 이 함수를 호출해야 한다.
