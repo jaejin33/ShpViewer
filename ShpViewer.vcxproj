@@ -218,6 +218,7 @@
     <ClInclude Include="culling\Frustum.h" />
     <ClInclude Include="math\Mat4.h" />
     <ClInclude Include="math\Vec3.h" />
+    <ClInclude Include="math\Vec4.h" />
     <ClInclude Include="parse\QuadTree.h" />
     <ClInclude Include="parse\DbfParser.h" />
     <ClInclude Include="parse\DbfTypes.h" />

@@ -251,6 +251,16 @@ void CGLView::Render()
         Mat4 proj = Mat4Perspective(kCameraFovRadians, aspect, kCameraNearPlane, kCameraFarPlane);
         Mat4 mvp = proj * view;
 
+        {
+            Mat4 inv_proj = Mat4InversePerspective(kCameraFovRadians, aspect, kCameraNearPlane, kCameraFarPlane);
+            Vec3 near_point = Vec4PerspectiveDivide(inv_proj * Vec4(0.0f, 0.0f, -1.0f, 1.0f));
+            Vec3 far_point = Vec4PerspectiveDivide(inv_proj * Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+            CString msg;
+            msg.Format(_T("[InverseProj] near z=%.2f (기대: -%.2f), far z=%.2f (기대: -%.2f)\n"),
+                near_point.z, kCameraNearPlane, far_point.z, kCameraFarPlane);
+            OutputDebugString(msg);
+        }
+
         GLint mvp_loc = glGetUniformLocation(m_shaderProgram, "u_mvp");
         glUniformMatrix4fv(mvp_loc, 1, GL_FALSE, mvp.m);
         GLint color_loc = glGetUniformLocation(m_shaderProgram, "u_color");

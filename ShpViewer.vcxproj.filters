@@ -90,6 +90,9 @@
     <ClInclude Include="render\InspectorWnd.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="math\Vec4.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ShpViewer.cpp">
