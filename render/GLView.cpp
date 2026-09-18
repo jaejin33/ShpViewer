@@ -1022,7 +1022,7 @@ bool CGLView::IntersectRayRecord(const Vec3& origin, const Vec3& direction, int3
     return true;
 }
 
-void CGLView::UpdatePickAt(CPoint point)
+void CGLView::UpdatePickAt(CPoint point, bool update_selection)
 {
     ComputePickRay(point, &m_pickRayOrigin, &m_pickRayDirection);
     m_hasPickRay = true;
@@ -1053,7 +1053,9 @@ void CGLView::UpdatePickAt(CPoint point)
     }
 
     if (best_index >= 0) {
-        m_pickedRecordIndex = best_index;
+        if (update_selection) {
+            m_pickedRecordIndex = best_index;
+        }
         m_pickHitPoint = m_pickRayOrigin + m_pickRayDirection * best_t;
         m_pickHitDistance = best_t;
         m_hasPickHit = true;
@@ -1068,7 +1070,9 @@ void CGLView::UpdatePickAt(CPoint point)
     }
 
     // 2) 건물을 못 맞췄으면 지면으로
-    m_pickedRecordIndex = -1;
+    if (update_selection) {
+        m_pickedRecordIndex = -1;
+    }
     float hit_t = 0.0f;
     m_hasPickHit = IntersectRayGroundPlane(m_pickRayOrigin, m_pickRayDirection, &hit_t);
     if (m_hasPickHit) {
@@ -1205,7 +1209,7 @@ void CGLView::OnRButtonDown(UINT nFlags, CPoint point)
     m_lastMousePos = point;
     m_isRotating = true;
 
-    UpdatePickAt(point);
+    UpdatePickAt(point, false);
     Invalidate();
     CWnd::OnRButtonDown(nFlags, point);
 }

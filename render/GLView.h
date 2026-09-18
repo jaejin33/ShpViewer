@@ -124,7 +124,7 @@ protected:
     Mat4 m_projMatrix = Mat4Identity();
 
     bool IntersectRayRecord(const Vec3& origin, const Vec3& direction, int32_t record_index, float* out_t) const;
-    void UpdatePickAt(CPoint point);
+    void UpdatePickAt(CPoint point, bool update_selection = true);
     void RenderPickMarker();
     void RenderPickRay();
     void UpdateProjection();
