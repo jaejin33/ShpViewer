@@ -30,7 +30,7 @@ public:
 	void SetShowEdges(bool show);
 	void SetShowObjectOutline(bool show);
 	void SetShowTriangulationLines(bool show);
-
+	void SetShowPickRay(bool show);
 // 재정의입니다.
 public:
 	virtual void OnDraw(CDC* pDC);  // 이 뷰를 그리기 위해 재정의되었습니다.

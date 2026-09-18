@@ -40,6 +40,7 @@ BEGIN_MESSAGE_MAP(CInspectorWnd, CWnd)
     ON_BN_CLICKED(kToggleEdgesButtonId, &CInspectorWnd::OnToggleEdgesClicked)
     ON_BN_CLICKED(kToggleOutlineButtonId, &CInspectorWnd::OnToggleOutlineClicked)
     ON_BN_CLICKED(kToggleTriangulationLinesButtonId, &CInspectorWnd::OnToggleTriangulationLinesClicked)   
+    ON_BN_CLICKED(kTogglePickRayButtonId, &CInspectorWnd::OnTogglePickRayClicked)
 END_MESSAGE_MAP()
 
 BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
@@ -99,6 +100,11 @@ BOOL CInspectorWnd::Create(CWnd* parent_wnd) {
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         CRect(10, 500, 210, 530), this, kToggleTriangulationLinesButtonId);
 
+    m_togglePickRayButton.Create(
+        m_showPickRay ? _T("피킹 레이: ON") : _T("피킹 레이: OFF"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(10, 540, 210, 570), this, kTogglePickRayButtonId);
+
     LayoutButtons(220);
 
     return TRUE;
@@ -118,6 +124,7 @@ int CInspectorWnd::LayoutButtons(int start_y) {
     place_full(m_toggleObjectBoundsButton);
     place_full(m_toggleOutlineButton);
     place_full(m_toggleTriangulationLinesButton);   
+    place_full(m_togglePickRayButton);
 
     m_toggle3DButton.MoveWindow(CRect(10, y, 108, y + 30));
     m_toggleEdgesButton.MoveWindow(CRect(112, y, 210, y + 30));
@@ -353,5 +360,15 @@ void CInspectorWnd::OnToggleTriangulationLinesClicked() {
 
     if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
         view->SetShowTriangulationLines(m_showTriangulationLines);
+    }
+}
+
+void CInspectorWnd::OnTogglePickRayClicked() {
+    m_showPickRay = !m_showPickRay;
+    m_togglePickRayButton.SetWindowText(
+        m_showPickRay ? _T("피킹 레이: ON") : _T("피킹 레이: OFF"));
+
+    if (CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent())) {
+        view->SetShowPickRay(m_showPickRay);
     }
 }

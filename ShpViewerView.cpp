@@ -345,3 +345,7 @@ void CShpViewerView::SetShowObjectOutline(bool show) {
 void CShpViewerView::SetShowTriangulationLines(bool show) {
 	m_glView.SetShowTriangulationLines(show);
 }
+
+void CShpViewerView::SetShowPickRay(bool show) {
+	m_glView.SetShowPickRay(show);
+}

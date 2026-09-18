@@ -51,6 +51,135 @@ namespace {
         }
         return area * 0.5;
     }
+
+    std::vector<std::vector<Vec3>> BuildRecordRings(const ShpPolygonRecord& record, int32_t record_index_for_log)
+    {
+        int32_t part_count = static_cast<int32_t>(record.part_start_indices.size());
+
+        std::vector<std::vector<Vec3>> all_parts;
+        for (int32_t p = 0; p < part_count; ++p) {
+            int32_t start = record.part_start_indices[p];
+            int32_t end = (p + 1 < part_count)
+                ? record.part_start_indices[p + 1]
+                : static_cast<int32_t>(record.points.size());
+            all_parts.emplace_back(record.points.begin() + start, record.points.begin() + end);
+        }
+
+        int32_t outer_part_index = 0;
+        std::vector<int32_t> hole_part_indices;
+
+        if (part_count > 1) {
+            std::vector<int32_t> outer_candidate_indices;
+            for (int32_t p = 0; p < part_count; ++p) {
+                if (ComputeRingArea(all_parts[p]) > 0.0) {
+                    outer_candidate_indices.push_back(p);
+                }
+            }
+
+            if (outer_candidate_indices.empty()) {
+                outer_part_index = 0;
+            }
+            else {
+                outer_part_index = outer_candidate_indices[0];
+                if (outer_candidate_indices.size() > 1 && record_index_for_log >= 0) {
+                    CString msg;
+                    msg.Format(_T("[Record %d] 데이터 오류: 외곽(양수) 파트가 %zu개 있음 — 서로 다른 건물이 반대 방향으로 감겨있을 가능성. part[%d]만 외곽으로 쓰고 나머지는 전부 홀로 처리함\n"),
+                        record_index_for_log, outer_candidate_indices.size(), outer_part_index);
+                    OutputDebugString(msg);
+                }
+            }
+
+            // 외곽으로 뽑히지 않은 나머지 파트는 전부 홀로 처리
+            for (int32_t p = 0; p < part_count; ++p) {
+                if (p == outer_part_index) continue;
+                hole_part_indices.push_back(p);
+            }
+        }
+
+        std::vector<std::vector<Vec3>> rings;
+        rings.push_back(all_parts[outer_part_index]);
+        for (int32_t hole_index : hole_part_indices) {
+            rings.push_back(all_parts[hole_index]);
+        }
+        return rings;
+    }
+
+    // 레이와 지면(y=0) 평면의 교차. 만나면 true와 거리 t를 돌려준다.
+    bool IntersectRayGroundPlane(const Vec3& origin, const Vec3& direction, float* out_t) {
+        if (std::fabs(direction.y) < 1e-8f) return false;
+
+        const float t = -origin.y / direction.y;
+        if (t < 0.0f) return false;
+
+        *out_t = t;
+        return true;
+    }
+
+    // 레이와 AABB의 교차 - slab 방식
+    // 만나면 true와 처음 닿는 거리 t를 돌려준다. 시작점이 상자 안이면 t = 0,
+    bool IntersectRayAabb(const Vec3& origin, const Vec3& direction, const Vec3& bounds_min, const Vec3& bounds_max, float* out_t) 
+    {
+        float t_min = 0.0f;         // 0 = 레이 뒤쪽은 안봄
+        float t_max = FLT_MAX;
+
+        const float o[3] = { origin.x, origin.y, origin.z };
+        const float d[3] = { direction.x, direction.y, direction.z };
+        const float lo[3] = { bounds_min.x, bounds_min.y, bounds_min.z };
+        const float hi[3] = { bounds_max.x, bounds_max.y, bounds_max.z };
+
+        for (int axis = 0; axis < 3; ++axis) {
+            if (std::fabs(d[axis]) < 1e-8f) {
+                // 이 축과 나란히 같다 : 시작점이 슬랩 밖이면 영영 못 들어감
+                if (o[axis] < lo[axis] || o[axis] > hi[axis]) return false;
+                continue;
+            }
+
+            const float inv_d = 1.0f / d[axis];
+            float t_enter = (lo[axis] - o[axis]) * inv_d;
+            float t_exit = (hi[axis] - o[axis]) * inv_d;
+            if (t_enter > t_exit) {     // 음수 방향이면 순서가 뒤집혀서 나옴
+                const float tmp = t_enter;
+                t_enter = t_exit;
+                t_exit = tmp;
+            }
+
+            if (t_enter > t_min) t_min = t_enter;
+            if (t_exit < t_max) t_max = t_exit;
+
+            if (t_min > t_max) return false;
+        }
+
+        *out_t = t_min;
+        return true;
+    }
+
+    bool IntersectRayTriangle(const Vec3& origin, const Vec3& direction, const Vec3& v0, const Vec3& v1, const Vec3& v2, float* out_t)
+    {
+        const Vec3 e1 = v1 - v0;
+        const Vec3 e2 = v2 - v0;
+        const Vec3 normal = Vec3Cross(e1, e2);
+
+        // 1) 평면과의 교점까지의 거리
+        const float denominator = Vec3Dot(normal, direction);
+        if (std::fabs(denominator) < 1e-8f) {
+            return false;   // 레이가 평면과 나란함
+        }
+
+        const float t = Vec3Dot(normal, v0 - origin) / denominator;
+        if (t < 0.0f) {
+            return false;   // 교점이 레이 뒤쪽
+        }
+
+        // 2) 그 교점이 삼각형 안인지 - 세 변 모두에 대해 같은 쪽이어야 한다
+        const Vec3 point = origin + direction * t;
+
+        if (Vec3Dot(normal, Vec3Cross(v1 - v0, point - v0)) < 0.0f) return false;
+        if (Vec3Dot(normal, Vec3Cross(v2 - v1, point - v1)) < 0.0f) return false;
+        if (Vec3Dot(normal, Vec3Cross(v0 - v2, point - v2)) < 0.0f) return false;
+
+        *out_t = t;
+        return true;
+    }
 }
 
 IMPLEMENT_DYNAMIC(CGLView, CWnd)
@@ -99,6 +228,9 @@ namespace {
     constexpr float kPlaceholderBuildingHeight = 10.0f;
     constexpr float kWallBottomShade = 0.6f;
     constexpr float kFpsUpdateIntervalSeconds = 0.5;
+    constexpr float kPickRayDebugLength = 100000.0f; // 디버그용 레이 길이
+    constexpr float kPickMarkerScreenScale = 0.005f;
+    constexpr float kSelectedColor[4] = { 1.0f, 0.2f, 0.2f, 1.0f };
 
     struct ExtrudeVertex {
         Vec3 position;
@@ -132,6 +264,8 @@ BOOL CGLView::InitEGL()
     if (m_eglDisplay == EGL_NO_DISPLAY) return FALSE;
 
     if (!eglInitialize(m_eglDisplay, nullptr, nullptr)) return FALSE;
+
+    UpdateProjection();
 
     EGLint configAttribs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -167,6 +301,8 @@ BOOL CGLView::InitEGL()
     glGenBuffers(1, &m_extrudeIndexBuffer);
     glGenBuffers(1, &m_edgeVertexBuffer);
     glGenBuffers(1, &m_fillWireIndexBuffer);
+    glGenBuffers(1, &m_pickRayVertexBuffer);
+    glGenBuffers(1, &m_pickMarkerVertexBuffer);
     return TRUE;
 }
 
@@ -243,23 +379,8 @@ void CGLView::Render()
     if (m_shaderProgram != 0 && !m_drawRanges.empty()) {
         glUseProgram(m_shaderProgram);
 
-        // ── 3. 카메라/투영 행렬 계산 (MVP) ──
-        float aspect = (m_clientHeight != 0)
-            ? static_cast<float>(m_clientWidth) / static_cast<float>(m_clientHeight)
-            : 1.0f;
-        Mat4 view = m_camera.GetViewMatrix();
-        Mat4 proj = Mat4Perspective(kCameraFovRadians, aspect, kCameraNearPlane, kCameraFarPlane);
-        Mat4 mvp = proj * view;
-
-        {
-            Mat4 inv_proj = Mat4InversePerspective(kCameraFovRadians, aspect, kCameraNearPlane, kCameraFarPlane);
-            Vec3 near_point = Vec4PerspectiveDivide(inv_proj * Vec4(0.0f, 0.0f, -1.0f, 1.0f));
-            Vec3 far_point = Vec4PerspectiveDivide(inv_proj * Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-            CString msg;
-            msg.Format(_T("[InverseProj] near z=%.2f (기대: -%.2f), far z=%.2f (기대: -%.2f)\n"),
-                near_point.z, kCameraNearPlane, far_point.z, kCameraFarPlane);
-            OutputDebugString(msg);
-        }
+        // ── 3. 카메라/투영 행렬  ──
+        Mat4 mvp = m_projMatrix * m_camera.GetViewMatrix();
 
         GLint mvp_loc = glGetUniformLocation(m_shaderProgram, "u_mvp");
         glUniformMatrix4fv(mvp_loc, 1, GL_FALSE, mvp.m);
@@ -373,6 +494,7 @@ void CGLView::Render()
                 glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 흰색으로 복구
             }
         }
+        m_lastVisibleIndices = filled_candidates;
 #ifdef ENABLE_CULLING_STATS
         {
             char buf[512];
@@ -396,8 +518,12 @@ void CGLView::Render()
 
             for (size_t j = 0; j < filled_candidates.size(); ++j) {
                 int32_t idx = filled_candidates[j];
+                const bool is_selected = (idx == m_pickedRecordIndex);
 
-                if (m_showAllObjectLevelColors) {
+                if (is_selected) {
+                    glUniform4fv(color_loc, 1, kSelectedColor);
+                }
+                else if (m_showAllObjectLevelColors) {
                     int32_t node_depth = object_box_depths[j];
                     int32_t color_index = (node_depth < kLevelColorCount) ? node_depth : (kLevelColorCount - 1);
                     glUniform4fv(color_loc, 1, kLevelColors[color_index]);
@@ -406,6 +532,10 @@ void CGLView::Render()
                 const FillRange& fill_range = m_fillRanges[idx];
                 glDrawElements(GL_TRIANGLES, fill_range.index_count, GL_UNSIGNED_INT,
                     (void*)(fill_range.first_index * sizeof(uint32_t)));
+
+                if (is_selected) {
+                    glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 복구
+                }
             }
 
             if (m_showAllObjectLevelColors) {
@@ -439,8 +569,12 @@ void CGLView::Render()
 
             for (size_t j = 0; j < filled_candidates.size(); ++j) {
                 int32_t idx = filled_candidates[j];
+                const bool is_selected = (idx == m_pickedRecordIndex);
 
-                if (m_showAllObjectLevelColors) {
+                if (is_selected) {
+                    glUniform4fv(color_loc, 1, kSelectedColor);
+                }
+                else if (m_showAllObjectLevelColors) {
                     int32_t node_depth = object_box_depths[j];
                     int32_t color_index = (node_depth < kLevelColorCount) ? node_depth : (kLevelColorCount - 1);
                     glUniform4fv(color_loc, 1, kLevelColors[color_index]);
@@ -448,6 +582,10 @@ void CGLView::Render()
 
                 const ExtrudeRange& extrude_range = m_extrudeRanges[idx];
                 glDrawElements(GL_TRIANGLES, extrude_range.index_count, GL_UNSIGNED_INT, (void*)(extrude_range.first_index * sizeof(uint32_t)));
+
+                if (is_selected) {
+                    glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);  // 다음 객체를 위해 복구
+                }
             }
 
             if (m_showAllObjectLevelColors) {
@@ -480,6 +618,18 @@ void CGLView::Render()
             RenderQuadTreeLevels(visible_nodes);
         }
 
+        // picking
+        if (m_hasPickRay) {
+            glDisableVertexAttribArray(1);
+            glVertexAttrib1f(1, 1.0f);
+            if (m_showPickRay) {
+                RenderPickRay();
+            }
+            if (m_hasPickHit && m_isPickMarkerVisible) {
+                RenderPickMarker();
+            }
+        }
+
         // ── 10. 성능 측정 종료 + 로그 출력 ──
         QueryPerformanceCounter(&end);
         float elapsed_ms = static_cast<float>(end.QuadPart - start.QuadPart) * 1000.0f
@@ -493,10 +643,10 @@ void CGLView::Render()
             cam_target.x, cam_target.y, cam_target.z,
             m_camera.GetDistance(), m_camera.GetYaw(), m_camera.GetPitch());
 #else
-        debug_msg.Format(_T("candidate_count=%d, visible_count=%d, draw_call_count=%d, elapsed_ms=%.2f\n"),
-            candidate_count, visible_count, draw_call_count, elapsed_ms);
+        //debug_msg.Format(_T("candidate_count=%d, visible_count=%d, draw_call_count=%d, elapsed_ms=%.2f\n"),
+        //    candidate_count, visible_count, draw_call_count, elapsed_ms);
 #endif
-        OutputDebugString(debug_msg);
+        //OutputDebugString(debug_msg);
     }
 
     // ── 11. 인스펙터 패널 갱신 ──
@@ -602,6 +752,11 @@ void CGLView::SetShowTriangulationLines(bool show) {
     m_showTriangulationLines = show;
 }
 
+void CGLView::SetShowPickRay(bool show) {
+    m_showPickRay = show;
+    Invalidate();
+}
+
 void CGLView::SetDataset(const ShpDataset* dataset) {
     m_pDataset = dataset;
     if (m_pDataset) {
@@ -642,65 +797,7 @@ void CGLView::BuildDebugGeometry() {
         const float building_height = GetRecordHeight(*m_pDataset, static_cast<size_t>(i), kPlaceholderBuildingHeight);
         int32_t part_count = static_cast<int32_t>(record.part_start_indices.size());
 
-        std::vector<std::vector<Vec3>> all_parts;
-        for (int32_t p = 0; p < part_count; ++p) {
-            int32_t start = record.part_start_indices[p];
-            int32_t end = (p + 1 < part_count)
-                ? record.part_start_indices[p + 1]
-                : static_cast<int32_t>(record.points.size());
-            all_parts.emplace_back(record.points.begin() + start, record.points.begin() + end);
-        }
-
-        int32_t outer_part_index = 0;
-        std::vector<int32_t> hole_part_indices;
-
-        if (part_count > 1) {
-            // 크기(절댓값) 비교 없이 부호만으로 역할을 정함: 넓이가 양수면 외곽, 음수(또는 0)면 홀
-            std::vector<int32_t> outer_candidate_indices;
-            for (int32_t p = 0; p < part_count; ++p) {
-                double area = ComputeRingArea(all_parts[p]);
-                bool is_outer_candidate = (area > 0.0);
-                CString msg;
-                msg.Format(_T("[Record %d] part[%d] area=%f%s\n"),
-                    i, p, area, is_outer_candidate ? _T(" <- 외곽(양수)") : _T(" <- 홀(음수)"));
-                OutputDebugString(msg);
-                if (is_outer_candidate) {
-                    outer_candidate_indices.push_back(p);
-                }
-            }
-
-            if (outer_candidate_indices.empty()) {
-                // 양수 파트가 하나도 없음 — part[0]을 임시 외곽으로 사용
-                CString msg;
-                msg.Format(_T("[Record %d] 데이터 오류: 외곽(양수) 파트가 하나도 없음 — part[0]을 임시 외곽으로 사용\n"), i);
-                OutputDebugString(msg);
-                outer_part_index = 0;
-            }
-            else {
-                outer_part_index = outer_candidate_indices[0];
-                if (outer_candidate_indices.size() > 1) {
-                    // 외곽(양수) 파트가 둘 이상 — 레코드 안에 서로 다른 건물이 섞여 있는데
-                    // 그중 일부가 반대 방향으로 감겨서 부호가 갈린 것으로 추정됨 → 건물 데이터 오류로 처리
-                    CString msg;
-                    msg.Format(_T("[Record %d] 데이터 오류: 외곽(양수) 파트가 %zu개 있음 — 서로 다른 건물이 반대 방향으로 감겨있을 가능성. part[%d]만 외곽으로 쓰고 나머지는 전부 홀로 처리함\n"),
-                        i, outer_candidate_indices.size(), outer_part_index);
-                    OutputDebugString(msg);
-                }
-            }
-
-            // 외곽으로 뽑히지 않은 나머지 파트는 전부 홀로 처리
-            for (int32_t p = 0; p < part_count; ++p) {
-                if (p == outer_part_index) continue;
-                hole_part_indices.push_back(p);
-            }
-        }
-        // part_count == 1이면 outer_part_index는 처음 값(0) 그대로 사용 — 부호 검사 자체를 안 함
-
-        std::vector<std::vector<Vec3>> rings;
-        rings.push_back(all_parts[outer_part_index]);
-        for (int32_t hole_index : hole_part_indices) {
-            rings.push_back(all_parts[hole_index]);
-        }
+        const std::vector<std::vector<Vec3>> rings = BuildRecordRings(record, i);
 
         std::vector<uint32_t> tri_indices = mapbox::earcut<uint32_t>(rings);
 
@@ -842,6 +939,206 @@ void CGLView::BuildDebugGeometry() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, fill_wire_indices.size() * sizeof(uint32_t), fill_wire_indices.data(), GL_STATIC_DRAW);
 }
 
+void CGLView::ComputePickRay(CPoint point, Vec3* out_origin, Vec3* out_direction) const {
+    // 1) 픽셀 -> NDC (y는 위아래가 반대라 부호를 뒤집는다)
+    const float ndc_x = (2.0f * point.x) / static_cast<float>(m_clientWidth) - 1.0f;
+    const float ndc_y = 1.0f - (2.0f * point.y) / static_cast<float>(m_clientHeight);
+
+    // 2) 렌더링에 쓴 것과 "완전히 동일한" 카메라/투영으로 역행렬을 만든다.
+    const Mat4 inv_view = Mat4InverseView(m_camera.GetViewMatrix());
+    const Mat4 inv_proj = Mat4InversePerspective(kCameraFovRadians, m_aspect, kCameraNearPlane, kCameraFarPlane);
+
+    // 역행렬은 곱하는 순서가 뒤집힘
+    const Mat4 inv_view_proj = inv_view * inv_proj;
+
+    // 3) 같은 픽셀의 근평면 점과 원평면 점을 각각 월드로 되돌린다
+    const Vec3 near_world = Vec4PerspectiveDivide(inv_view_proj * Vec4(ndc_x, ndc_y, -1.0f, 1.0f));
+    const Vec3 far_world = Vec4PerspectiveDivide(inv_view_proj * Vec4(ndc_x, ndc_y, 1.0f, 1.0f));
+
+    // 4) 두 점을 이으면 레이가 됨
+    *out_origin = near_world;
+    *out_direction = Vec3Normalize(far_world - near_world);
+}
+
+// 건물 하나를 실제 삼각형(지붕 + 벽)
+bool CGLView::IntersectRayRecord(const Vec3& origin, const Vec3& direction, int32_t record_index, float* out_t) const {
+    if (!m_pDataset) return false;
+    if (record_index < 0 || record_index >= static_cast<int32_t>(m_pDataset->records.size())) return false;
+
+    const ShpPolygonRecord& record = m_pDataset->records[record_index];
+    const float building_height = GetRecordHeight(*m_pDataset, static_cast<size_t>(record_index), kPlaceholderBuildingHeight);
+
+    // 로그는 로딩 때 이미 찍었으므로 -1을 넘겨 억제한다
+    const std::vector<std::vector<Vec3>> rings = BuildRecordRings(record, -1);
+
+    // earcut이 인덱스로 가리키는 것과 같은 순서로 정점을 한 줄로 편다
+    std::vector<Vec3> flat_points;
+    for (const std::vector<Vec3>& ring : rings) {
+        for (const Vec3& p : ring) {
+            flat_points.push_back(p);
+        }
+    }
+
+    const std::vector<uint32_t> tri_indices = mapbox::earcut<uint32_t>(rings);
+
+    float best_t = FLT_MAX;
+    float hit_t = 0.0f;
+
+    // 1) 지붕 - 삼각분할 결과를 건물 높이로 올린 것
+    for (size_t k = 0; k + 2 < tri_indices.size(); k += 3) {
+        const Vec3& a = flat_points[tri_indices[k]];
+        const Vec3& b = flat_points[tri_indices[k + 1]];
+        const Vec3& c = flat_points[tri_indices[k + 2]];
+
+        if (IntersectRayTriangle(origin, direction,
+            Vec3(a.x, building_height, a.z),
+            Vec3(b.x, building_height, b.z),
+            Vec3(c.x, building_height, c.z), &hit_t) && hit_t < best_t) {
+            best_t = hit_t;
+        }
+    }
+
+    // 2) 벽 — 링의 변마다 바닥~지붕 사각형을 삼각형 2개로 (렌더링과 같은 순서)
+    for (const std::vector<Vec3>& ring : rings) {
+        const int32_t point_count = static_cast<int32_t>(ring.size());
+        for (int32_t k = 0; k < point_count; ++k) {
+            const Vec3& p0 = ring[k];
+            const Vec3& p1 = ring[(k + 1) % point_count];
+
+            const Vec3 bottom0(p0.x, 0.0f, p0.z);
+            const Vec3 bottom1(p1.x, 0.0f, p1.z);
+            const Vec3 top1(p1.x, building_height, p1.z);
+            const Vec3 top0(p0.x, building_height, p0.z);
+
+            if (IntersectRayTriangle(origin, direction, bottom0, bottom1, top1, &hit_t)
+                && hit_t < best_t) best_t = hit_t;
+            if (IntersectRayTriangle(origin, direction, bottom0, top1, top0, &hit_t)
+                && hit_t < best_t) best_t = hit_t;
+        }
+    }
+
+    if (best_t == FLT_MAX) return false;
+    *out_t = best_t;
+    return true;
+}
+
+void CGLView::UpdatePickAt(CPoint point)
+{
+    ComputePickRay(point, &m_pickRayOrigin, &m_pickRayDirection);
+    m_hasPickRay = true;
+
+    // 1) 화면에 보이는 건물들 중 가장 가까운 것
+    int32_t best_index = -1;
+    float best_t = FLT_MAX;
+    int32_t aabb_pass_count = 0;
+
+    for (int32_t index : m_lastVisibleIndices) {
+        const RecordRange& record_range = m_recordRanges[index];
+        
+        float aabb_t = 0.0f;
+        if (!IntersectRayAabb(m_pickRayOrigin, m_pickRayDirection, record_range.bounds_min, record_range.bounds_max, &aabb_t)) {
+            continue;
+        }
+        ++aabb_pass_count;
+
+        // AABB에 처음 닿는 거리는 그 안의 어떤 삼각형보다도 가깝거나 같다.
+        // 이미 찾은 교차점보다 상자 자체가 멀면 안을 열어볼 필요가 없다.
+        if (aabb_t >= best_t) continue;
+
+        float triangle_t = 0.0f;
+        if (IntersectRayRecord(m_pickRayOrigin, m_pickRayDirection, index, &triangle_t) && triangle_t < best_t) {
+            best_t = triangle_t;
+            best_index = index;
+        }
+    }
+
+    if (best_index >= 0) {
+        m_pickedRecordIndex = best_index;
+        m_pickHitPoint = m_pickRayOrigin + m_pickRayDirection * best_t;
+        m_pickHitDistance = best_t;
+        m_hasPickHit = true;
+        m_isPickMarkerVisible = true;
+
+        CString msg;
+        msg.Format(_T("[PickHit] building #%d (%.2f, %.2f, %.2f) t=%.2f  가시 %zu개 → AABB통과 %d개\n"),
+            best_index, m_pickHitPoint.x, m_pickHitPoint.y, m_pickHitPoint.z,
+            best_t, m_lastVisibleIndices.size(), aabb_pass_count);
+        OutputDebugString(msg);
+        return;
+    }
+
+    // 2) 건물을 못 맞췄으면 지면으로
+    m_pickedRecordIndex = -1;
+    float hit_t = 0.0f;
+    m_hasPickHit = IntersectRayGroundPlane(m_pickRayOrigin, m_pickRayDirection, &hit_t);
+    if (m_hasPickHit) {
+        m_pickHitPoint = m_pickRayOrigin + m_pickRayDirection * hit_t;
+        m_pickHitDistance = hit_t;
+        m_isPickMarkerVisible = true;
+
+        CString msg;
+        msg.Format(_T("[PickHit] ground (%.2f, %.2f, %.2f) t=%.2f\n"),
+            m_pickHitPoint.x, m_pickHitPoint.y, m_pickHitPoint.z, hit_t);
+        OutputDebugString(msg);
+    }
+}
+
+void CGLView::RenderPickRay() {
+    const Vec3 end = m_pickRayOrigin + m_pickRayDirection * kPickRayDebugLength;
+    const Vec3 line[2] = { m_pickRayOrigin, end };
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_pickRayVertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(line), line, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+
+    GLint color_loc = glGetUniformLocation(m_shaderProgram, "u_color");
+    glUniform4f(color_loc, 1.0f, 0.2f, 0.2f, 1.0f);
+    glDrawArrays(GL_LINES, 0, 2);
+    glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void CGLView::RenderPickMarker() {
+    //화면에서 항상 비슷한 크기로 보이도록 현재 카메라와의 거리에 비례시킨다.
+    const float distance = Vec3Length(m_pickHitPoint - m_camera.GetEye());
+    const float half = distance * kPickMarkerScreenScale;
+    const Vec3& p = m_pickHitPoint;
+
+    // 꼭짓점 8개
+    const Vec3 corner[8] = {
+        Vec3(p.x - half, p.y - half, p.z - half),   // 0
+        Vec3(p.x + half, p.y - half, p.z - half),   // 1
+        Vec3(p.x + half, p.y + half, p.z - half),   // 2
+        Vec3(p.x - half, p.y + half, p.z - half),   // 3
+        Vec3(p.x - half, p.y - half, p.z + half),   // 4
+        Vec3(p.x + half, p.y - half, p.z + half),   // 5
+        Vec3(p.x + half, p.y + half, p.z + half),   // 6
+        Vec3(p.x - half, p.y + half, p.z + half),   // 7
+    };
+
+    // 면 6개
+    static const int kCubeIndices[36] = {
+        0, 1, 2,  0, 2, 3,   // 뒷면   (z-)
+        4, 5, 6,  4, 6, 7,   // 앞면   (z+)
+        0, 4, 7,  0, 7, 3,   // 왼쪽   (x-)
+        1, 2, 6,  1, 6, 5,   // 오른쪽 (x+)
+        0, 1, 5,  0, 5, 4,   // 아랫면 (y-)
+        3, 7, 6,  3, 6, 2,   // 윗면   (y+)
+    };
+
+    // 번호를 실제 좌표로 펼침
+    Vec3 vertices[36];
+    for (int i = 0; i < 36; i++) {
+        vertices[i] = corner[kCubeIndices[i]];
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_pickMarkerVertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+
+    GLint color_loc = glGetUniformLocation(m_shaderProgram, "u_color");
+    glUniform4f(color_loc, 1.0f, 1.0f, 1.0f, 1.0f);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+}
 void CGLView::Cleanup()
 {
     if (m_eglDisplay != EGL_NO_DISPLAY)
@@ -866,6 +1163,7 @@ void CGLView::OnSize(UINT nType, int cx, int cy)
 
     m_clientWidth = cx;
     m_clientHeight = cy;
+    UpdateProjection();
 
     if (m_eglDisplay != EGL_NO_DISPLAY) {
         glViewport(0, 0, cx, cy);
@@ -885,15 +1183,19 @@ void CGLView::OnLButtonDown(UINT nFlags, CPoint point)
     SetCapture();
     m_lastMousePos = point;
     m_isPanning = true;
+    m_lButtonDownPos = point;
 
+    UpdatePickAt(point);
+    Invalidate();
     CWnd::OnLButtonDown(nFlags, point);
 }
 
 void CGLView::OnLButtonUp(UINT nFlags, CPoint point)
 {
     m_isPanning = false;
-
+    m_isPickMarkerVisible = false;
     ReleaseCapture();
+    Invalidate();
     CWnd::OnLButtonUp(nFlags, point);
 }
 
@@ -903,14 +1205,18 @@ void CGLView::OnRButtonDown(UINT nFlags, CPoint point)
     m_lastMousePos = point;
     m_isRotating = true;
 
+    UpdatePickAt(point);
+    Invalidate();
     CWnd::OnRButtonDown(nFlags, point);
 }
 
 void CGLView::OnRButtonUp(UINT nFlags, CPoint point)
 {
     m_isRotating = false;
-
+    m_isPickMarkerVisible = false;
     ReleaseCapture();
+
+    Invalidate();
     CWnd::OnRButtonUp(nFlags, point);
 }
 
@@ -948,4 +1254,10 @@ BOOL CGLView::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
 void CGLView::OnContextMenu(CWnd* /*pWnd*/, CPoint /*point*/)
 {
     // 기본 컨텍스트 메뉴가 뜨지 않도록 비워둠
+}
+
+void CGLView::UpdateProjection() {
+    m_aspect = (m_clientHeight != 0)
+        ? static_cast<float>(m_clientWidth) / static_cast<float>(m_clientHeight) : 1.0f;
+    m_projMatrix = Mat4Perspective(kCameraFovRadians, m_aspect, kCameraNearPlane, kCameraFarPlane);
 }

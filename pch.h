@@ -10,6 +10,6 @@
 // 여기에 미리 컴파일하려는 헤더 추가
 #include "framework.h"
 
-#define ENABLE_CULLING_STATS   // 임시 진단용 - 측정 끝나면 이 줄만 지우거나 주석 처리
+//#define ENABLE_CULLING_STATS   // 임시 진단용 - 측정 끝나면 이 줄만 지우거나 주석 처리
 
 #endif //PCH_H

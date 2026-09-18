@@ -39,6 +39,7 @@ void Camera::RecomputeEye() {
         distance_ * cos_pitch * cos_yaw);
 
     eye_ = target_ + offset;
+    view_ = Mat4LookAt(eye_, target_, Vec3(0.0f, 1.0f, 0.0f));
 }
 
 void Camera::Recenter(const Vec3& target, float distance) {

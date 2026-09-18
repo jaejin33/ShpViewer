@@ -12,6 +12,7 @@ namespace {
     constexpr int kToggleEdgesButtonId = 2007;
     constexpr int kToggleOutlineButtonId = 2008;
     constexpr int kToggleTriangulationLinesButtonId = 2009;
+    constexpr int kTogglePickRayButtonId = 2010;
 }
 
 class CInspectorWnd : public CWnd
@@ -40,6 +41,8 @@ protected:
     CButton m_toggleEdgesButton;
     CButton m_toggleOutlineButton;
     CButton m_toggleTriangulationLinesButton;
+    CButton m_togglePickRayButton;
+    bool m_showPickRay = true;
     bool m_showFill = false;
     bool m_showQuadTreeLevels = false;
     bool m_showAllNodes = false;
@@ -65,4 +68,5 @@ protected:
     afx_msg void OnToggleEdgesClicked();
     afx_msg void OnToggleOutlineClicked();
     afx_msg void OnToggleTriangulationLinesClicked();
+    afx_msg void OnTogglePickRayClicked();
 };

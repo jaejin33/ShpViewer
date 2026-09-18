@@ -56,6 +56,7 @@ public:
     void SetShowEdges(bool show);
     void SetShowObjectOutline(bool show);
     void SetShowTriangulationLines(bool show);
+    void SetShowPickRay(bool show);
 
 protected:
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
@@ -69,6 +70,8 @@ protected:
     int m_clientWidth = 0;
     int m_clientHeight = 0;
     std::vector<RecordRange> m_recordRanges;
+    std::vector<int32_t> m_lastVisibleIndices;   // 직전 프레임에 그린 객체들 (피킹 후보)
+    int32_t m_pickedRecordIndex = -1;
 
     const ShpDataset* m_pDataset = nullptr;
     GLuint m_shaderProgram = 0;
@@ -83,6 +86,9 @@ protected:
     GLuint m_edgeVertexBuffer = 0;
     std::vector<EdgeRange> m_edgeRanges;
     std::vector<FillRange> m_fillWireRanges;
+    GLuint m_pickRayVertexBuffer = 0;
+    GLuint m_pickMarkerVertexBuffer = 0;
+    
 
     bool m_showAllObjectLevelColors = false;
     bool m_showAllNodes = false;
@@ -93,9 +99,19 @@ protected:
     bool m_showEdges = true;
     bool m_showObjectOutline = false;
     bool m_showTriangulationLines = false;
+    bool m_showPickRay = true;
     GLuint m_fillWireIndexBuffer = 0;
     GLuint m_nodeBoxVertexBuffer = 0;
     GLuint m_objectBoxVertexBuffer = 0;
+    
+    Vec3 m_pickHitPoint;
+    float m_pickHitDistance = 0.0f;
+    bool m_hasPickHit = false;
+    bool m_hasPickRay = false;
+    Vec3 m_pickRayOrigin;
+    Vec3 m_pickRayDirection;
+    CPoint m_lButtonDownPos;
+    bool m_isPickMarkerVisible = false;
 
     bool m_showFrustum = false;
     std::array<Vec3, 8> m_frustumCorners{};
@@ -104,7 +120,14 @@ protected:
     int32_t m_fpsFrameCount = 0;
     double m_fpsAccumulatedSeconds = 0.0f;
     float m_fps = 0.0f;
+    float m_aspect = 1.0f;
+    Mat4 m_projMatrix = Mat4Identity();
 
+    bool IntersectRayRecord(const Vec3& origin, const Vec3& direction, int32_t record_index, float* out_t) const;
+    void UpdatePickAt(CPoint point);
+    void RenderPickMarker();
+    void RenderPickRay();
+    void UpdateProjection();
     void CaptureFrustumCorners();
     void RenderFrustum();
     void RenderObjectBounds(const std::vector<int32_t>& visible_indices, const std::vector<int32_t>& depths);
@@ -112,6 +135,7 @@ protected:
     bool InitShader();
     void BuildDebugGeometry();
     void RenderQuadTreeLevels(const std::vector<NodeDebugInfo>& nodes);
+    void ComputePickRay(CPoint point, Vec3* out_origin, Vec3* out_direction) const;
 
     DECLARE_MESSAGE_MAP()
     afx_msg void OnPaint();

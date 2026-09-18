@@ -20,7 +20,7 @@ public:
 
     Vec3 GetEye() const { return eye_; }
     Vec3 GetTarget() const { return target_; }
-    Mat4 GetViewMatrix() const { return Mat4LookAt(eye_, target_, Vec3(0.0f, 1.0f, 0.0f)); }
+    Mat4 GetViewMatrix() const { return view_; }
 
     void Zoom(float scale_factor);
 
@@ -40,6 +40,7 @@ private:
     float yaw_;    // 라디안, target 기준 수평 회전각
     float pitch_;  // 라디안, target 기준 수직 회전각
     Vec3 eye_;     // 캐시된 카메라 월드 좌표
+    Mat4 view_;
 
     // pitch가 ±90도에 가까워지면 Mat4LookAt 내부에서 카메라 right 벡터가
     // 거의 0벡터가 되어 뷰 행렬이 깨진다 — 그 전에 멈추기 위한 안전 한계.
