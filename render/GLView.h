@@ -38,6 +38,13 @@ class CGLView :
         GLint vertex_count = 0;
     };
 
+    struct PickResult {
+        Vec3 point;                   // 맞은 지점의 월드 좌표
+        float t = 0.0f;               // 레이 시작점에서의 거리
+        int32_t record_index = -1;    // 맞은 건물 번호. -1이면 지면
+        int32_t aabb_pass_count = 0;  // 진단용 - AABB를 통과한 후보 개수
+    };
+
 public:
     CGLView();
     virtual ~CGLView();
@@ -124,6 +131,8 @@ protected:
     Mat4 m_projMatrix = Mat4Identity();
 
     bool IntersectRayRecord(const Vec3& origin, const Vec3& direction, int32_t record_index, float* out_t) const;
+    bool PickWorldPoint(const Vec3& origin, const Vec3& direction, PickResult* out_result) const;
+    void ShowPickMarkerAt(const PickResult& result);
     void UpdatePickAt(CPoint point, bool update_selection = true);
     void RenderPickMarker();
     void RenderPickRay();

@@ -132,3 +132,14 @@ inline Mat4 Mat4InversePerspective(float fovYRadians, float aspect, float nearZ,
 
 	return result;
 }
+
+// 카메라의 세 축(정규직교)과 위치로 뷰 행렬을 바로 만든다.
+inline Mat4 Mat4ViewFromBasis(const Vec3& right, const Vec3& up, const Vec3& back, const Vec3& eye)
+{
+	Mat4 result{};
+	result.m[0] = right.x; result.m[4] = right.y; result.m[8] = right.z;  result.m[12] = -Vec3Dot(right, eye);
+	result.m[1] = up.x;    result.m[5] = up.y;    result.m[9] = up.z;     result.m[13] = -Vec3Dot(up, eye);
+	result.m[2] = back.x;  result.m[6] = back.y;  result.m[10] = back.z;  result.m[14] = -Vec3Dot(back, eye);
+	result.m[15] = 1.0f;
+	return result;
+}

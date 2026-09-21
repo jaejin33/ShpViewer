@@ -3,26 +3,32 @@
 #include "../math/Mat4.h"
 
 // 3인칭 궤도(orbit) 카메라.
-// target을 중심으로 distance만큼 떨어진 채 yaw(수평 회전)/pitch(수직 회전)로 공전한다.
-// eye는 target/distance/yaw/pitch로부터 계산되는 캐시 값 — 이 네 값이 바뀔 때만 재계산한다.
+// pivot_ : 회전/줌의 기준점. 우클릭으로 찍은 지점이 여기로 들어온다.
+// eye_   : 카메라 위치.  yaw_/pitch_ : 카메라가 보는 방향.
+// 불변식 : distance_ == |eye_ - pivot_|  — 팬/줌 속도의 축척 기준.
+// 시선은 yaw/pitch만으로 만든다. pivot은 시선에 관여하지 않는다.
 class Camera {
 public:
-    Camera(const Vec3& target, float distance, float yaw, float pitch);
+    Camera(const Vec3& pivot, float distance, float yaw, float pitch);
 
-    // 우클릭 드래그: target을 중심으로 회전.
-    // deltaYaw/deltaPitch는 라디안 단위 (마우스 픽셀 -> 라디안 변환은 호출하는 쪽 책임).
+    // 우클릭 드래그: pivot을 축으로 카메라를 통째로 돌린다.
     void Rotate(float delta_yaw, float delta_pitch);
 
-    // 좌클릭 드래그: 화면 기준 좌우(right)/상하(up)로 target을 이동(pan).
+    // 좌클릭 드래그: 카메라와 pivot을 화면 기준 좌우/상하로 함께 옮긴다.
     void Pan(float delta_right, float delta_up);
 
-    void Recenter(const Vec3& target, float distance);
+    // 휠: pivot을 향해 다가가거나 멀어진다.
+    void Zoom(float scale_factor);
+
+    // 데이터 로드 직후 등, 카메라를 pivot 정면에 새로 배치한다.
+    void Recenter(const Vec3& pivot, float distance);
+
+    // 회전/줌 기준점만 바꾼다. 위치도 시선도 그대로라 화면은 안 움직인다.
+    void SetPivot(const Vec3& pivot);
 
     Vec3 GetEye() const { return eye_; }
-    Vec3 GetTarget() const { return target_; }
-    Mat4 GetViewMatrix() const { return view_; }
-
-    void Zoom(float scale_factor);
+    Vec3 GetPivot() const { return pivot_; }
+    const Mat4& GetViewMatrix() const { return view_; }
 
 #ifdef ENABLE_CULLING_STATS
     float GetDistance() const { return distance_; }
@@ -31,20 +37,24 @@ public:
 #endif
 
 private:
-    // target_/distance_/yaw_/pitch_로부터 eye_를 다시 계산해서 캐시한다.
-    // Rotate()/Pan()이 값을 바꾼 뒤에는 반드시 이 함수를 호출해야 한다.
-    void RecomputeEye();
+    // yaw/pitch가 가리키는 카메라의 세 축. back은 카메라가 등지고 있는 방향.
+    static void MakeBasis(float yaw, float pitch, Vec3& right, Vec3& up, Vec3& back);
 
-    Vec3 target_;
-    float distance_;
-    float yaw_;    // 라디안, target 기준 수평 회전각
-    float pitch_;  // 라디안, target 기준 수직 회전각
-    Vec3 eye_;     // 캐시된 카메라 월드 좌표
-    Mat4 view_;
+    // offset_/yaw_/pitch_ -> eye_와 view_를 다시 만든다.
+    void Commit();
 
-    // pitch가 ±90도에 가까워지면 Mat4LookAt 내부에서 카메라 right 벡터가
-    // 거의 0벡터가 되어 뷰 행렬이 깨진다 — 그 전에 멈추기 위한 안전 한계.
+    // pivot_ 정면 distance_ 지점에 카메라를 놓는다(생성/Recenter 전용).
+    void PlaceOnPivot();
+
+    Vec3 pivot_;     // 회전/줌 기준점. 월드 좌표라 값이 크다(38만 대).
+    Vec3 offset_;    // eye_ - pivot_. 값이 작아 오차가 안 쌓인다 — 진짜 상태는 이쪽.
+    float distance_; // 항상 |offset_|. 팬/줌 속도의 축척 기준.
+    float yaw_;
+    float pitch_;
+    Vec3 eye_;       // pivot_ + offset_ (캐시)
+    Mat4 view_;      // 캐시
+
     static constexpr float kMaxPitchRadians = 1.5533f;  // 약 89도
-    static constexpr float kMinDistance = 1.0f; // 0 이하로 가까워지는 것을 방지
-    static constexpr float kPanSensitivity = 0.001f;    // distance_ 대비, 픽셀당 이동 비율
+    static constexpr float kMinDistance = 1.0f;
+    static constexpr float kPanSensitivity = 0.001f;
 };

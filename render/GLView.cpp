@@ -619,13 +619,15 @@ void CGLView::Render()
         }
 
         // picking
-        if (m_hasPickRay) {
+        const bool draw_pick_ray = m_hasPickRay && m_showPickRay;
+        const bool draw_pick_marker = m_hasPickHit && m_isPickMarkerVisible;
+        if (draw_pick_ray || draw_pick_marker) {
             glDisableVertexAttribArray(1);
             glVertexAttrib1f(1, 1.0f);
-            if (m_showPickRay) {
+            if (draw_pick_ray) {
                 RenderPickRay();
             }
-            if (m_hasPickHit && m_isPickMarkerVisible) {
+            if (draw_pick_marker) {
                 RenderPickMarker();
             }
         }
@@ -637,7 +639,7 @@ void CGLView::Render()
 
         CString debug_msg;
 #ifdef ENABLE_CULLING_STATS
-        Vec3 cam_target = m_camera.GetTarget();
+        Vec3 cam_target = m_camera.GetPivot();
         debug_msg.Format(_T("candidate_count=%d, visible_count=%d, draw_call_count=%d, elapsed_ms=%.2f | camera target=(%.4f, %.4f, %.4f) distance=%.4f yaw=%.6f pitch=%.6f\n"),
             candidate_count, visible_count, draw_call_count, elapsed_ms,
             cam_target.x, cam_target.y, cam_target.z,
@@ -1022,69 +1024,83 @@ bool CGLView::IntersectRayRecord(const Vec3& origin, const Vec3& direction, int3
     return true;
 }
 
-void CGLView::UpdatePickAt(CPoint point, bool update_selection)
+bool CGLView::PickWorldPoint(const Vec3& origin, const Vec3& direction, PickResult* out_result) const
 {
-    ComputePickRay(point, &m_pickRayOrigin, &m_pickRayDirection);
-    m_hasPickRay = true;
-
-    // 1) 화면에 보이는 건물들 중 가장 가까운 것
     int32_t best_index = -1;
     float best_t = FLT_MAX;
     int32_t aabb_pass_count = 0;
 
+    // 1) 화면에 보이는 건물들 중 가장 가까운 것
     for (int32_t index : m_lastVisibleIndices) {
         const RecordRange& record_range = m_recordRanges[index];
-        
+
         float aabb_t = 0.0f;
-        if (!IntersectRayAabb(m_pickRayOrigin, m_pickRayDirection, record_range.bounds_min, record_range.bounds_max, &aabb_t)) {
+        if (!IntersectRayAabb(origin, direction, record_range.bounds_min, record_range.bounds_max, &aabb_t)) {
             continue;
         }
         ++aabb_pass_count;
 
         // AABB에 처음 닿는 거리는 그 안의 어떤 삼각형보다도 가깝거나 같다.
-        // 이미 찾은 교차점보다 상자 자체가 멀면 안을 열어볼 필요가 없다.
         if (aabb_t >= best_t) continue;
 
         float triangle_t = 0.0f;
-        if (IntersectRayRecord(m_pickRayOrigin, m_pickRayDirection, index, &triangle_t) && triangle_t < best_t) {
+        if (IntersectRayRecord(origin, direction, index, &triangle_t) && triangle_t < best_t) {
             best_t = triangle_t;
             best_index = index;
         }
     }
 
-    if (best_index >= 0) {
-        if (update_selection) {
-            m_pickedRecordIndex = best_index;
-        }
-        m_pickHitPoint = m_pickRayOrigin + m_pickRayDirection * best_t;
-        m_pickHitDistance = best_t;
-        m_hasPickHit = true;
-        m_isPickMarkerVisible = true;
-
-        CString msg;
-        msg.Format(_T("[PickHit] building #%d (%.2f, %.2f, %.2f) t=%.2f  가시 %zu개 → AABB통과 %d개\n"),
-            best_index, m_pickHitPoint.x, m_pickHitPoint.y, m_pickHitPoint.z,
-            best_t, m_lastVisibleIndices.size(), aabb_pass_count);
-        OutputDebugString(msg);
-        return;
-    }
-
     // 2) 건물을 못 맞췄으면 지면으로
-    if (update_selection) {
-        m_pickedRecordIndex = -1;
+    if (best_index < 0) {
+        float ground_t = 0.0f;
+        if (!IntersectRayGroundPlane(origin, direction, &ground_t)) return false;
+        best_t = ground_t;
     }
-    float hit_t = 0.0f;
-    m_hasPickHit = IntersectRayGroundPlane(m_pickRayOrigin, m_pickRayDirection, &hit_t);
-    if (m_hasPickHit) {
-        m_pickHitPoint = m_pickRayOrigin + m_pickRayDirection * hit_t;
-        m_pickHitDistance = hit_t;
-        m_isPickMarkerVisible = true;
 
-        CString msg;
-        msg.Format(_T("[PickHit] ground (%.2f, %.2f, %.2f) t=%.2f\n"),
-            m_pickHitPoint.x, m_pickHitPoint.y, m_pickHitPoint.z, hit_t);
-        OutputDebugString(msg);
+    out_result->point = origin + direction * best_t;
+    out_result->t = best_t;
+    out_result->record_index = best_index;
+    out_result->aabb_pass_count = aabb_pass_count;
+    return true;
+}
+
+void CGLView::ShowPickMarkerAt(const PickResult& result)
+{
+    m_pickHitPoint = result.point;
+    m_pickHitDistance = result.t;
+    m_hasPickHit = true;
+    m_isPickMarkerVisible = true;
+}
+
+// 좌클릭 전용 — 계산 결과를 화면 상태(디버그 레이/마커/선택)에 반영한다.
+void CGLView::UpdatePickAt(CPoint point, bool update_selection)
+{
+    ComputePickRay(point, &m_pickRayOrigin, &m_pickRayDirection);
+    m_hasPickRay = true;
+
+    PickResult result;
+    m_hasPickHit = PickWorldPoint(m_pickRayOrigin, m_pickRayDirection, &result);
+
+    if (update_selection) {
+        m_pickedRecordIndex = result.record_index;   // 지면이면 -1
     }
+    if (!m_hasPickHit) return;
+
+    m_pickHitPoint = result.point;
+    m_pickHitDistance = result.t;
+    m_isPickMarkerVisible = true;
+
+    CString msg;
+    if (result.record_index >= 0) {
+        msg.Format(_T("[PickHit] building #%d (%.2f, %.2f, %.2f) t=%.2f  가시 %zu개 → AABB통과 %d개\n"),
+            result.record_index, result.point.x, result.point.y, result.point.z,
+            result.t, m_lastVisibleIndices.size(), result.aabb_pass_count);
+    }
+    else {
+        msg.Format(_T("[PickHit] ground (%.2f, %.2f, %.2f) t=%.2f\n"),
+            result.point.x, result.point.y, result.point.z, result.t);
+    }
+    OutputDebugString(msg);
 }
 
 void CGLView::RenderPickRay() {
@@ -1203,17 +1219,6 @@ void CGLView::OnLButtonUp(UINT nFlags, CPoint point)
     CWnd::OnLButtonUp(nFlags, point);
 }
 
-void CGLView::OnRButtonDown(UINT nFlags, CPoint point)
-{
-    SetCapture();
-    m_lastMousePos = point;
-    m_isRotating = true;
-
-    UpdatePickAt(point, false);
-    Invalidate();
-    CWnd::OnRButtonDown(nFlags, point);
-}
-
 void CGLView::OnRButtonUp(UINT nFlags, CPoint point)
 {
     m_isRotating = false;
@@ -1222,6 +1227,26 @@ void CGLView::OnRButtonUp(UINT nFlags, CPoint point)
 
     Invalidate();
     CWnd::OnRButtonUp(nFlags, point);
+}
+
+void CGLView::OnRButtonDown(UINT nFlags, CPoint point)
+{
+    SetCapture();
+    m_lastMousePos = point;
+    m_isRotating = true;
+
+    // 레이/마커/선택은 건드리지 않는다.
+    Vec3 origin, direction;
+    ComputePickRay(point, &origin, &direction);
+
+    PickResult result;
+    if (PickWorldPoint(origin, direction, &result)) {
+        m_camera.SetPivot(result.point);
+        ShowPickMarkerAt(result);
+    }
+
+    Invalidate();
+    CWnd::OnRButtonDown(nFlags, point);
 }
 
 void CGLView::OnMouseMove(UINT nFlags, CPoint point)
@@ -1247,6 +1272,21 @@ void CGLView::OnMouseMove(UINT nFlags, CPoint point)
 
 BOOL CGLView::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
 {
+    // 주의: OnMouseWheel의 pt는 "스크린" 좌표다. 클라이언트 좌표로 바꿔야 한다.
+    CPoint client_point = pt;
+    ScreenToClient(&client_point);
+
+    if (client_point.x >= 0 && client_point.y >= 0 &&
+        client_point.x < m_clientWidth && client_point.y < m_clientHeight) {
+        Vec3 origin, direction;
+        ComputePickRay(client_point, &origin, &direction);
+
+        PickResult result;
+        if (PickWorldPoint(origin, direction, &result)) {
+            m_camera.SetPivot(result.point);   // 커서 밑의 점이 줌 기준
+        }
+    }
+
     float notches = static_cast<float>(zDelta) / WHEEL_DELTA;
     float scale = std::pow(kZoomFactor, notches);
     m_camera.Zoom(scale);
