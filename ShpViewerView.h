@@ -21,6 +21,11 @@ public:
 // 작업입니다.
 public:
 	void UpdateInspector(int32_t visible_count, int32_t total_count, float fps);
+	void UpdateSelection(const CInspectorWnd::SelectionInfo& info);
+	void SetSelectedRecordHeight(float height);
+	void ResetSelectedRecordHeight();
+	void ToggleSelectedRecordHidden();
+	void RestoreAllRecords();
 	void SetShowQuadTreeLevels(bool show);
 	void SetShowAllNodes(bool show);
 	void SetShowAllObjectLevelColors(bool show);
@@ -31,6 +36,11 @@ public:
 	void SetShowObjectOutline(bool show);
 	void SetShowTriangulationLines(bool show);
 	void SetShowPickRay(bool show);
+	void AdjustSelectedRecordHeight(float delta);
+	void TranslateSelectedRecord(float dx, float dz);
+	void ResetSelectedRecordEdit();
+	void RotateSelectedRecord(float delta_radians);
+	void ScaleSelectedRecord(float factor);
 // 재정의입니다.
 public:
 	virtual void OnDraw(CDC* pDC);  // 이 뷰를 그리기 위해 재정의되었습니다.

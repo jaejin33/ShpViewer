@@ -71,6 +71,14 @@ inline Mat4 Mat4RotateY(float radians) {
 	return result;
 }
 
+inline Mat4 Mat4Scale(const Vec3& s) {
+	Mat4 result = Mat4Identity();
+	result.m[0] = s.x;
+	result.m[5] = s.y;
+	result.m[10] = s.z;
+	return result;
+}
+
 inline Mat4 Mat4LookAt(const Vec3& eye, const Vec3& target, const Vec3& up)
 {
 	Vec3 zaxis = Vec3Normalize(eye - target);

@@ -19,25 +19,7 @@ namespace mapbox {
 } }
 
 namespace {
-    //float ComputeRingArea(const std::vector<Vec3>& ring) {
-    //    float area = 0.0f;
-    //    size_t n = ring.size();
-    //    Vec3 origin = ring[0];   // 정밀도 확보용 기준점 — 결과인 넓이 값 자체엔 영향 없음
-    //    for (size_t i = 0; i < n; ++i) {
-    //        size_t j = (i + 1) % n;
-    //        area += ring[i].x * ring[j].z - ring[j].x * ring[i].z;
-    //    }
-    //    return area * 0.5f;
-    //    //for (size_t i = 0; i < n; ++i) {
-    //    //    size_t j = (i + 1) % n;
-    //    //    float xi = ring[i].x - origin.x;
-    //    //    float zi = ring[i].z - origin.z;
-    //    //    float xj = ring[j].x - origin.x;
-    //    //    float zj = ring[j].z - origin.z;
-    //    //    area += xi * zj - xj * zi;
-    //    //}
-    //    //return area * 0.5f;
-    //}
+    
     double ComputeRingArea(const std::vector<Vec3>& ring) {
         double area = 0.0;
         size_t n = ring.size();
@@ -52,17 +34,20 @@ namespace {
         return area * 0.5;
     }
 
-    std::vector<std::vector<Vec3>> BuildRecordRings(const ShpPolygonRecord& record, int32_t record_index_for_log)
+    std::vector<std::vector<Vec3>> BuildRecordRings(
+        const std::vector<Vec3>& points,
+        const std::vector<int32_t>& part_start_indices,
+        int32_t record_index_for_log)
     {
-        int32_t part_count = static_cast<int32_t>(record.part_start_indices.size());
+        int32_t part_count = static_cast<int32_t>(part_start_indices.size());
 
         std::vector<std::vector<Vec3>> all_parts;
         for (int32_t p = 0; p < part_count; ++p) {
-            int32_t start = record.part_start_indices[p];
+            int32_t start = part_start_indices[p];
             int32_t end = (p + 1 < part_count)
-                ? record.part_start_indices[p + 1]
-                : static_cast<int32_t>(record.points.size());
-            all_parts.emplace_back(record.points.begin() + start, record.points.begin() + end);
+                ? part_start_indices[p + 1]
+                : static_cast<int32_t>(points.size());
+            all_parts.emplace_back(points.begin() + start, points.begin() + end);
         }
 
         int32_t outer_part_index = 0;
@@ -180,14 +165,21 @@ namespace {
         *out_t = t;
         return true;
     }
+
+    Mat4 BuildEditMatrix(const RecordEdit& edit, const Vec3& pivot) {
+        return Mat4Translate(pivot + edit.translate)
+            * Mat4RotateY(edit.rotate_y)
+            * Mat4Scale(Vec3(edit.scale, edit.scale, edit.scale))
+            * Mat4Translate(-pivot);
+    }
 }
 
 IMPLEMENT_DYNAMIC(CGLView, CWnd)
 
 BEGIN_MESSAGE_MAP(CGLView, CWnd)
-	ON_WM_PAINT()
-	ON_WM_SIZE()
-	ON_WM_ERASEBKGND()
+    ON_WM_PAINT()
+    ON_WM_SIZE()
+    ON_WM_ERASEBKGND()
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
     ON_WM_RBUTTONDOWN()
@@ -195,6 +187,7 @@ BEGIN_MESSAGE_MAP(CGLView, CWnd)
     ON_WM_MOUSEMOVE()
     ON_WM_MOUSEWHEEL()
     ON_WM_CONTEXTMENU()
+    ON_WM_KEYDOWN()
 END_MESSAGE_MAP()
 
 CGLView::CGLView() : m_camera(Vec3(0.0f, 0.0f, 0.0f), 10.0f, 0.0f, 1.55f) {}
@@ -231,6 +224,16 @@ namespace {
     constexpr float kPickRayDebugLength = 100000.0f; // 디버그용 레이 길이
     constexpr float kPickMarkerScreenScale = 0.005f;
     constexpr float kSelectedColor[4] = { 1.0f, 0.2f, 0.2f, 1.0f };
+    constexpr float kMinEditableHeight = 1.0f;
+    constexpr float kClickSlopPixels = 4;
+    constexpr float kClickSlopSquared = kClickSlopPixels * kClickSlopPixels;
+    constexpr float kMinEditScale = 0.1f;
+    constexpr float kMaxEditScale = 10.0f;
+    constexpr float kKeyMoveStepMeters = 1.0f;
+    constexpr float kKeyRotateStepRadians = 3.0f * 3.14159265358979323846f / 180.0f;
+    constexpr float kKeyFastMultiplier = 10.0f;
+    constexpr float kKeyScaleStep = 1.01f;        // 한 번에 +1%
+    constexpr float kKeyScaleFastStep = 1.10f;
 
     struct ExtrudeVertex {
         Vec3 position;
@@ -252,6 +255,54 @@ namespace {
             return 0;
         }
         return shader;
+    }
+
+    void AppendRecordExtrude(const std::vector<std::vector<Vec3>>& rings,
+        const std::vector<uint32_t>& tri_indices,
+        float height,
+        std::vector<ExtrudeVertex>* out_vertices,
+        std::vector<uint32_t>* out_indices,
+        std::vector<Vec3>* out_edges)
+    {
+        const int32_t roof_vertex_offset = static_cast<int32_t>(out_vertices->size());
+
+        // 지붕 - 인덱스를 먼저, 정점을 나중에
+        for (uint32_t idx : tri_indices) {
+            out_indices->push_back(roof_vertex_offset + idx);
+        }
+        for (const std::vector<Vec3>& ring : rings) {
+            for (const Vec3& p : ring) {
+                out_vertices->push_back({ Vec3(p.x, height, p.z), 1.0f });
+            }
+        }
+
+        // 벽 + 윤곽선
+        for (const std::vector<Vec3>& ring : rings) {
+            const int32_t point_count = static_cast<int32_t>(ring.size());
+            for (int32_t k = 0; k < point_count; ++k) {
+                const Vec3& p0 = ring[k];
+                const Vec3& p1 = ring[(k + 1) % point_count];
+
+                const int32_t wall_vertex_offset = static_cast<int32_t>(out_vertices->size());
+
+                out_vertices->push_back({ Vec3(p0.x, 0.0f,   p0.z), kWallBottomShade });
+                out_vertices->push_back({ Vec3(p1.x, 0.0f,   p1.z), kWallBottomShade });
+                out_vertices->push_back({ Vec3(p1.x, height, p1.z), 1.0f });
+                out_vertices->push_back({ Vec3(p0.x, height, p0.z), 1.0f });
+
+                out_indices->push_back(wall_vertex_offset + 0);
+                out_indices->push_back(wall_vertex_offset + 1);
+                out_indices->push_back(wall_vertex_offset + 2);
+                out_indices->push_back(wall_vertex_offset + 0);
+                out_indices->push_back(wall_vertex_offset + 2);
+                out_indices->push_back(wall_vertex_offset + 3);
+
+                out_edges->push_back(Vec3(p0.x, height, p0.z));
+                out_edges->push_back(Vec3(p1.x, height, p1.z));
+                out_edges->push_back(Vec3(p0.x, 0.0f, p0.z));
+                out_edges->push_back(Vec3(p0.x, height, p0.z));
+            }
+        }
     }
 }
 
@@ -408,7 +459,7 @@ void CGLView::Render()
         g_cullingStats = CullingStats{};   // 이번 프레임 측정을 위해 초기화
 #endif
 
-        // ── 6. 쿼드트리 broad-phase 쿼리 (컬링 1단계) ──
+        // ── 6. 노드 단위 컬링  ──
         QueryVisibleObjects(
             m_pDataset->quad_tree.get(),
             planes,
@@ -419,6 +470,18 @@ void CGLView::Render()
             (m_showAllObjectLevelColors || m_showObjectBounds) ? &candidate_depths : nullptr,
             (m_showQuadTreeLevels && !m_showAllNodes) ? &visible_nodes : nullptr);
 
+        // 편집된 객체는 객체 단위 컬링으로 넘어가도록
+        for (const auto& pair : m_edits) {
+            const int32_t index = pair.first;
+            if (std::find(candidate_indices.begin(), candidate_indices.end(), index)
+                == candidate_indices.end()) {
+                candidate_indices.push_back(index);
+                if (!candidate_depths.empty()) {
+                    candidate_depths.push_back(0);   // 색상 디버그용 깊이 - 의미 없으니 0
+                }
+            }
+        }
+
         if (m_showAllNodes) {
             CollectAllQuadTreeNodes(m_pDataset->quad_tree.get(), planes, 0, &visible_nodes);
         }
@@ -426,9 +489,10 @@ void CGLView::Render()
         int32_t candidate_count = static_cast<int32_t>(candidate_indices.size());
         int32_t draw_call_count = 0;
 
-        // ── 7. 객체별 컬링 ──
+        // ── 7. 객체 단위 컬링 ──
         for (size_t i = 0; i < candidate_indices.size(); ++i) {
             int32_t candidate_index = candidate_indices[i];
+            if (!IsRecordVisible(candidate_index)) continue;
             const RecordRange& record_range = m_recordRanges[candidate_index];
 
 #ifdef ENABLE_CULLING_STATS
@@ -782,7 +846,12 @@ void CGLView::BuildDebugGeometry() {
     m_recordRanges.clear();
     m_fillRanges.clear();
     m_fillWireRanges.clear();
+    m_extrudeRanges.clear();
+    m_edgeRanges.clear();
     if (!m_pDataset) return;
+    m_recordVisibility.assign(m_pDataset->records.size(), RecordVisibility::kNormal);
+    m_editedPoints.clear();
+    m_heightOverrides.clear();
 
     std::vector<Vec3> vertices;
     std::vector<Vec3> fill_vertices;
@@ -796,16 +865,18 @@ void CGLView::BuildDebugGeometry() {
 
     for (int32_t i = 0; i < record_count; ++i) {
         const ShpPolygonRecord& record = m_pDataset->records[i];
-        const float building_height = GetRecordHeight(*m_pDataset, static_cast<size_t>(i), kPlaceholderBuildingHeight);
+        const float building_height = GetEffectiveHeight(i);
+        const std::vector<Vec3>& points = GetEffectivePoints(i);
         int32_t part_count = static_cast<int32_t>(record.part_start_indices.size());
 
-        const std::vector<std::vector<Vec3>> rings = BuildRecordRings(record, i);
+        const std::vector<std::vector<Vec3>> rings = BuildRecordRings(points, record.part_start_indices, i);
 
         std::vector<uint32_t> tri_indices = mapbox::earcut<uint32_t>(rings);
 
         FillRange fill_range;
         fill_range.first_index = static_cast<GLint>(fill_indices.size());
         fill_range.index_count = static_cast<GLsizei>(tri_indices.size());
+        fill_range.first_vertex = static_cast<GLint>(fill_vertices.size());
 
         int32_t vertex_offset = static_cast<int32_t>(fill_vertices.size());
         for (uint32_t idx : tri_indices) {
@@ -816,6 +887,7 @@ void CGLView::BuildDebugGeometry() {
                 fill_vertices.push_back(p);
             }
         }
+        fill_range.vertex_count = static_cast<GLsizei>(static_cast<GLint>(fill_vertices.size()) - fill_range.first_vertex);
 
         m_fillRanges.push_back(fill_range);
 
@@ -834,52 +906,22 @@ void CGLView::BuildDebugGeometry() {
 
         ExtrudeRange extrude_range;
         extrude_range.first_index = static_cast<GLint>(extrude_indices.size());
-
-        int32_t roof_vertex_offset = static_cast<int32_t>(extrude_vertices.size());
-        for (uint32_t idx : tri_indices) {
-            extrude_indices.push_back(roof_vertex_offset + idx);
-        }
-        for (const std::vector<Vec3>& ring : rings) {
-            for (const Vec3& p : ring) {
-                extrude_vertices.push_back({ Vec3(p.x, building_height, p.z), 1.0f });
-            }
-        }
+        extrude_range.first_vertex = static_cast<GLint>(extrude_vertices.size());
 
         EdgeRange edge_range;
         edge_range.first_vertex = static_cast<GLint>(edge_vertices.size());
 
-        for (const std::vector<Vec3>& ring : rings) {
-            int32_t point_count = static_cast<int32_t>(ring.size());
-            for (int32_t k = 0; k < point_count; ++k) {
-                const Vec3& p0 = ring[k];
-                const Vec3& p1 = ring[(k + 1) % point_count];
+        AppendRecordExtrude(rings, tri_indices, building_height,
+            &extrude_vertices, &extrude_indices, &edge_vertices);
 
-                int32_t wall_vertex_offset = static_cast<int32_t>(extrude_vertices.size());
-
-                extrude_vertices.push_back({ Vec3(p0.x, 0.0f, p0.z), kWallBottomShade });
-                extrude_vertices.push_back({ Vec3(p1.x, 0.0f, p1.z), kWallBottomShade });
-                extrude_vertices.push_back({ Vec3(p1.x, building_height, p1.z), 1.0f });
-                extrude_vertices.push_back({ Vec3(p0.x, building_height, p0.z), 1.0f });
-
-                extrude_indices.push_back(wall_vertex_offset + 0);
-                extrude_indices.push_back(wall_vertex_offset + 1);
-                extrude_indices.push_back(wall_vertex_offset + 2);
-
-                extrude_indices.push_back(wall_vertex_offset + 0);
-                extrude_indices.push_back(wall_vertex_offset + 2);
-                extrude_indices.push_back(wall_vertex_offset + 3);
-
-                edge_vertices.push_back(Vec3(p0.x, building_height, p0.z));
-                edge_vertices.push_back(Vec3(p1.x, building_height, p1.z));
-
-                edge_vertices.push_back(Vec3(p0.x, 0.0f, p0.z));
-                edge_vertices.push_back(Vec3(p0.x, building_height, p0.z));
-            }
-        }
-        edge_range.vertex_count = static_cast<GLsizei>(edge_vertices.size() - edge_range.first_vertex);
-        m_edgeRanges.push_back(edge_range);
         extrude_range.index_count = static_cast<GLsizei>(extrude_indices.size() - extrude_range.first_index);
+        extrude_range.vertex_count = static_cast<GLsizei>(
+            static_cast<GLint>(extrude_vertices.size()) - extrude_range.first_vertex);
         m_extrudeRanges.push_back(extrude_range);
+
+        edge_range.vertex_count = static_cast<GLsizei>(
+            static_cast<GLint>(edge_vertices.size()) - edge_range.first_vertex);
+        m_edgeRanges.push_back(edge_range);
 
         RecordRange record_range;
         record_range.first_range_index = static_cast<int32_t>(m_drawRanges.size());
@@ -891,7 +933,7 @@ void CGLView::BuildDebugGeometry() {
             int32_t start = record.part_start_indices[p];
             int32_t end = (p + 1 < part_count)
                 ? record.part_start_indices[p + 1]
-                : static_cast<int32_t>(record.points.size());
+                : static_cast<int32_t>(points.size());
 
             DrawRange range;
             range.first = static_cast<GLint>(vertices.size());
@@ -899,21 +941,9 @@ void CGLView::BuildDebugGeometry() {
             m_drawRanges.push_back(range);
 
             for (int32_t k = start; k < end; ++k) {
-                vertices.push_back(record.points[k]);
+                vertices.push_back(points[k]);
             }
         }
-
-        //if (part_count > 1) {
-        //    CString debug_msg;
-        //    debug_msg.Format(_T("record %d: part_count=%d\n"), i, part_count);
-        //    OutputDebugString(debug_msg);
-        //    for (int32_t k = 0; k < static_cast<int32_t>(record.points.size()) && k < 5; ++k) {
-        //        CString point_msg;
-        //        point_msg.Format(_T("  point[%d] = (%.2f, %.2f, %.2f)\n"),
-        //            k, record.points[k].x, record.points[k].y, record.points[k].z);
-        //        OutputDebugString(point_msg);
-        //    }
-        //}
 
         record_range.range_count = static_cast<int32_t>(m_drawRanges.size()) - record_range.first_range_index;
         m_recordRanges.push_back(record_range);
@@ -939,6 +969,293 @@ void CGLView::BuildDebugGeometry() {
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_fillWireIndexBuffer);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, fill_wire_indices.size() * sizeof(uint32_t), fill_wire_indices.data(), GL_STATIC_DRAW);
+}
+
+void CGLView::RebuildRecordGeometry(int32_t record_index) {
+    if (!m_pDataset) return;
+    if (record_index < 0 ||
+        record_index >= static_cast<int32_t>(m_recordRanges.size())) return;
+
+    const ShpPolygonRecord& record = m_pDataset->records[record_index];
+    const float height = GetEffectiveHeight(record_index);
+    const std::vector<Vec3>& points = GetEffectivePoints(record_index);
+
+    const std::vector<std::vector<Vec3>> rings = BuildRecordRings(GetEffectivePoints(record_index), record.part_start_indices, -1);
+    const std::vector<uint32_t> tri_indices = mapbox::earcut<uint32_t>(rings);
+
+    // ── 1) 압출(지붕·벽) + 3D 윤곽선 정점을 새로 만든다
+    std::vector<ExtrudeVertex> new_extrude;
+    std::vector<uint32_t> unused_indices;
+    std::vector<Vec3> new_edges;
+    AppendRecordExtrude(rings, tri_indices, height, &new_extrude, &unused_indices, &new_edges);
+
+    // ── 2) 바닥 채우기 정점을 새로 만든다 (링 순서 = BuildDebugGeometry와 동일해야 한다)
+    std::vector<Vec3> new_fill;
+    for (const std::vector<Vec3>& ring : rings) {
+        for (const Vec3& p : ring) {
+            new_fill.push_back(p);
+        }
+    }
+
+    const ExtrudeRange& extrude_range = m_extrudeRanges[record_index];
+    const EdgeRange& edge_range = m_edgeRanges[record_index];
+    const FillRange& fill_range = m_fillRanges[record_index];
+
+    // 개수가 다르면 옆 레코드 영역을 침범한다 - 망가지는 걸 막는다
+    if (static_cast<GLsizei>(new_extrude.size()) != extrude_range.vertex_count ||
+        static_cast<GLsizei>(new_edges.size()) != edge_range.vertex_count ||
+        static_cast<GLsizei>(new_fill.size()) != fill_range.vertex_count) {
+        ASSERT(FALSE);
+        return;
+    }
+
+    // ── 3) GPU 버퍼 네 개를 제자리에 덮어쓴다
+    glBindBuffer(GL_ARRAY_BUFFER, m_extrudeVertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER,
+        static_cast<GLintptr>(extrude_range.first_vertex) * sizeof(ExtrudeVertex),
+        static_cast<GLsizeiptr>(new_extrude.size()) * sizeof(ExtrudeVertex),
+        new_extrude.data());
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_edgeVertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER,
+        static_cast<GLintptr>(edge_range.first_vertex) * sizeof(Vec3),
+        static_cast<GLsizeiptr>(new_edges.size()) * sizeof(Vec3),
+        new_edges.data());
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_fillVertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER,
+        static_cast<GLintptr>(fill_range.first_vertex) * sizeof(Vec3),
+        static_cast<GLsizeiptr>(new_fill.size()) * sizeof(Vec3),
+        new_fill.data());
+
+    // 2D 윤곽선은 파트들이 버퍼 안에서 연속이라 한 번에 덮어쓸 수 있다.
+    // 내용/순서가 points와 똑같아서 그대로 넘기면 된다.
+    const RecordRange& record_range = m_recordRanges[record_index];
+    const DrawRange& first_part = m_drawRanges[record_range.first_range_index];
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER,
+        static_cast<GLintptr>(first_part.first) * sizeof(Vec3),
+        static_cast<GLsizeiptr>(points.size()) * sizeof(Vec3),
+        points.data());
+
+    if (!points.empty()) {
+        float min_x = points[0].x, max_x = points[0].x;
+        float min_z = points[0].z, max_z = points[0].z;
+        for (const Vec3& p : points) {
+            if (p.x < min_x) min_x = p.x;
+            if (p.x > max_x) max_x = p.x;
+            if (p.z < min_z) min_z = p.z;
+            if (p.z > max_z) max_z = p.z;
+        }
+
+        m_recordRanges[record_index].bounds_min = Vec3(min_x, 0.0f, min_z);
+        m_recordRanges[record_index].bounds_max = Vec3(max_x, height, max_z);
+    }
+
+    if (record_index == m_pickedRecordIndex) {
+        NotifySelectionChanged();
+    }
+    Invalidate();
+}
+
+void CGLView::UpdateRecordHeight(int32_t record_index, float new_height) {
+    if (new_height < kMinEditableHeight) new_height = kMinEditableHeight;
+    m_heightOverrides[record_index] = new_height;
+    RebuildRecordGeometry(record_index);
+}
+
+void CGLView::ResetRecordHeight(int32_t record_index) {
+    m_heightOverrides.erase(record_index);   // 원본 .dbf 값으로 복귀
+    RebuildRecordGeometry(record_index);
+}
+
+void CGLView::AdjustSelectedRecordHeight(float delta) {
+    if (m_pickedRecordIndex < 0) return;   // 선택된 게 없거나 지면
+    UpdateRecordHeight(m_pickedRecordIndex,
+        GetEffectiveHeight(m_pickedRecordIndex) + delta);
+}
+
+float CGLView::GetEffectiveHeight(int32_t record_index) const {
+    if (!m_pDataset) return kPlaceholderBuildingHeight;
+
+    // 1) 기본 높이 — 사용자가 편집했으면 그 값, 아니면 .dbf 원본
+    float height = kPlaceholderBuildingHeight;
+    const auto it = m_heightOverrides.find(record_index);
+    if (it != m_heightOverrides.end()) {
+        height = it->second;
+    }
+    else {
+        height = GetRecordHeight(*m_pDataset, static_cast<size_t>(record_index),
+            kPlaceholderBuildingHeight);
+    }
+
+    // 2) 배율을 높이에도 반영한다.
+    //    BuildEditMatrix의 y 스케일과 짝을 이뤄야 미리보기(행렬)와 확정(굽기)이 같아진다.
+    //    바닥 점은 y가 0이라 행렬만으로는 높이가 안 변하므로 여기서 곱해준다.
+    const auto edit_it = m_edits.find(record_index);
+    if (edit_it != m_edits.end()) {
+        height *= edit_it->second.scale;
+    }
+
+    return height;
+}
+
+void CGLView::NotifySelectionChanged() {
+    CShpViewerView* view = dynamic_cast<CShpViewerView*>(GetParent());
+    if (!view) return;
+
+    CInspectorWnd::SelectionInfo info;
+    info.record_index = m_pickedRecordIndex;
+
+    if (m_pDataset && m_pickedRecordIndex >= 0 &&
+        m_pickedRecordIndex < static_cast<int32_t>(m_pDataset->records.size())) {
+
+        info.height = GetEffectiveHeight(m_pickedRecordIndex);
+        info.height_overridden =
+            (m_heightOverrides.find(m_pickedRecordIndex) != m_heightOverrides.end());
+        info.hidden = !IsRecordVisible(m_pickedRecordIndex);
+
+        // .dbf 속성 표시(P6)는 나중에 - 여기에 attributes를 채우는 루프만 추가하면 된다
+    }
+
+    view->UpdateSelection(info);
+}
+
+void CGLView::SetSelectedRecordHeight(float height) {
+    if (m_pickedRecordIndex < 0) return;
+    UpdateRecordHeight(m_pickedRecordIndex, height);
+}
+
+void CGLView::ResetSelectedRecordHeight() {
+    if (m_pickedRecordIndex < 0) return;
+    ResetRecordHeight(m_pickedRecordIndex);
+}
+
+bool CGLView::IsRecordVisible(int32_t record_index) const {
+    if (record_index < 0 ||
+        record_index >= static_cast<int32_t>(m_recordVisibility.size())) {
+        return true;   // 정보가 없으면 보이는 것으로 본다
+    }
+    return m_recordVisibility[record_index] == RecordVisibility::kNormal;
+}
+
+void CGLView::ToggleSelectedRecordHidden() {
+    if (m_pickedRecordIndex < 0) return;
+    if (m_pickedRecordIndex >= static_cast<int32_t>(m_recordVisibility.size())) {
+        OutputDebugString(_T("[Toggle] 범위 밖 - 조용히 리턴\n"));
+        return;
+    }
+    RecordVisibility& state = m_recordVisibility[m_pickedRecordIndex];
+    state = (state == RecordVisibility::kNormal)
+        ? RecordVisibility::kHidden
+        : RecordVisibility::kNormal;
+
+    CString msg;                                                      // 임시 진단
+    msg.Format(_T("[Toggle] #%d -> %s (size=%zu)\n"),
+        m_pickedRecordIndex,
+        state == RecordVisibility::kHidden ? _T("숨김") : _T("표시"),
+        m_recordVisibility.size());
+    OutputDebugString(msg);
+
+    NotifySelectionChanged();
+    Invalidate();
+}
+
+void CGLView::RestoreAllRecords() {
+    int hidden_before = 0;                                            // 임시 진단
+    for (RecordVisibility v : m_recordVisibility) {
+        if (v != RecordVisibility::kNormal) ++hidden_before;
+    }
+    CString msg;
+    msg.Format(_T("[RestoreAll] size=%zu hidden=%d\n"),
+        m_recordVisibility.size(), hidden_before);
+    OutputDebugString(msg);
+
+    std::fill(m_recordVisibility.begin(), m_recordVisibility.end(),
+        RecordVisibility::kNormal);
+    NotifySelectionChanged();
+    Invalidate();
+}
+
+const std::vector<Vec3>& CGLView::GetEffectivePoints(int32_t record_index) const {
+    static const std::vector<Vec3> kEmpty;
+    if (!m_pDataset) return kEmpty;
+    if (record_index < 0 || record_index >= static_cast<int32_t>(m_pDataset->records.size())) return kEmpty;
+
+    const auto it = m_editedPoints.find(record_index);
+    if (it != m_editedPoints.end()) {
+        return it->second;
+    }
+    return m_pDataset->records[record_index].points;
+}
+
+Vec3 CGLView::GetRecordPivot(int32_t record_index) const {
+    const ShpPolygonRecord& record = m_pDataset->records[record_index];
+    return (record.bounds_min + record.bounds_max) * 0.5f;
+}
+
+void CGLView::ApplyEditToRecord(int32_t record_index) {
+    if (!m_pDataset) return;
+    if (record_index < 0 || record_index >= static_cast<int32_t>(m_pDataset->records.size())) return;
+
+    const auto edit_it = m_edits.find(record_index);
+    if (edit_it == m_edits.end()) {
+        m_editedPoints.erase(record_index);
+        RebuildRecordGeometry(record_index);
+        return;
+    }
+
+    // 원본에서 다시 계산
+    const std::vector<Vec3>& original = m_pDataset->records[record_index].points;
+    const Mat4 model = BuildEditMatrix(edit_it->second, GetRecordPivot(record_index));
+
+    std::vector<Vec3> moved;
+    moved.reserve(original.size());
+    for (const Vec3& p : original) {
+        moved.push_back(model * p);
+    }
+    m_editedPoints[record_index] = std::move(moved);
+
+    RebuildRecordGeometry(record_index);
+}
+
+void CGLView::TranslateSelectedRecord(float dx, float dz) {
+    if (m_pickedRecordIndex < 0) return;
+
+    RecordEdit& edit = m_edits[m_pickedRecordIndex];
+    edit.translate.x += dx;
+    edit.translate.z += dz;
+
+    ApplyEditToRecord(m_pickedRecordIndex);
+}
+
+void CGLView::ResetSelectedRecordEdit() {
+    if (m_pickedRecordIndex < 0) return;
+    m_edits.erase(m_pickedRecordIndex);
+    m_editedPoints.erase(m_pickedRecordIndex);
+    RebuildRecordGeometry(m_pickedRecordIndex);
+}
+
+void CGLView::RotateSelectedRecord(float delta_radians) {
+    if (m_pickedRecordIndex < 0) return;
+
+    RecordEdit& edit = m_edits[m_pickedRecordIndex];
+    edit.rotate_y += delta_radians;
+
+    ApplyEditToRecord(m_pickedRecordIndex);
+}
+
+void CGLView::ScaleSelectedRecord(float factor) {
+    if (m_pickedRecordIndex < 0) return;
+
+    RecordEdit& edit = m_edits[m_pickedRecordIndex];
+    edit.scale *= factor;
+
+    if (edit.scale < kMinEditScale) edit.scale = kMinEditScale;
+    if (edit.scale > kMaxEditScale) edit.scale = kMaxEditScale;
+
+    ApplyEditToRecord(m_pickedRecordIndex);
 }
 
 void CGLView::ComputePickRay(CPoint point, Vec3* out_origin, Vec3* out_direction) const {
@@ -968,10 +1285,10 @@ bool CGLView::IntersectRayRecord(const Vec3& origin, const Vec3& direction, int3
     if (record_index < 0 || record_index >= static_cast<int32_t>(m_pDataset->records.size())) return false;
 
     const ShpPolygonRecord& record = m_pDataset->records[record_index];
-    const float building_height = GetRecordHeight(*m_pDataset, static_cast<size_t>(record_index), kPlaceholderBuildingHeight);
+    const float building_height = GetEffectiveHeight(record_index);
 
     // 로그는 로딩 때 이미 찍었으므로 -1을 넘겨 억제한다
-    const std::vector<std::vector<Vec3>> rings = BuildRecordRings(record, -1);
+    const std::vector<std::vector<Vec3>> rings = BuildRecordRings(GetEffectivePoints(record_index), record.part_start_indices, -1);
 
     // earcut이 인덱스로 가리키는 것과 같은 순서로 정점을 한 줄로 편다
     std::vector<Vec3> flat_points;
@@ -1073,7 +1390,7 @@ void CGLView::ShowPickMarkerAt(const PickResult& result)
 }
 
 // 좌클릭 전용 — 계산 결과를 화면 상태(디버그 레이/마커/선택)에 반영한다.
-void CGLView::UpdatePickAt(CPoint point, bool update_selection)
+void CGLView::UpdatePickAt(CPoint point, PickIntent intent)
 {
     ComputePickRay(point, &m_pickRayOrigin, &m_pickRayDirection);
     m_hasPickRay = true;
@@ -1081,8 +1398,9 @@ void CGLView::UpdatePickAt(CPoint point, bool update_selection)
     PickResult result;
     m_hasPickHit = PickWorldPoint(m_pickRayOrigin, m_pickRayDirection, &result);
 
-    if (update_selection) {
+    if (intent == PickIntent::kSelect) {
         m_pickedRecordIndex = result.record_index;   // 지면이면 -1
+        NotifySelectionChanged();
     }
     if (!m_hasPickHit) return;
 
@@ -1200,12 +1518,13 @@ BOOL CGLView::OnEraseBkgnd(CDC* pDC)
 
 void CGLView::OnLButtonDown(UINT nFlags, CPoint point)
 {
+    SetFocus();
     SetCapture();
     m_lastMousePos = point;
     m_isPanning = true;
     m_lButtonDownPos = point;
 
-    UpdatePickAt(point);
+    UpdatePickAt(point, PickIntent::kPreviewOnly);
     Invalidate();
     CWnd::OnLButtonDown(nFlags, point);
 }
@@ -1215,6 +1534,15 @@ void CGLView::OnLButtonUp(UINT nFlags, CPoint point)
     m_isPanning = false;
     m_isPickMarkerVisible = false;
     ReleaseCapture();
+
+    // 누른 자리에서 거의 안 움직였으면 "클릭", 많이 움직였으면 "드래그(팬)"
+    const int dx = point.x - m_lButtonDownPos.x;
+    const int dy = point.y - m_lButtonDownPos.y;
+    if (dx * dx + dy * dy <= kClickSlopSquared) {
+        UpdatePickAt(point, PickIntent::kSelect);
+    }
+
+    m_isPickMarkerVisible = false;
     Invalidate();
     CWnd::OnLButtonUp(nFlags, point);
 }
@@ -1231,6 +1559,7 @@ void CGLView::OnRButtonUp(UINT nFlags, CPoint point)
 
 void CGLView::OnRButtonDown(UINT nFlags, CPoint point)
 {
+    SetFocus();
     SetCapture();
     m_lastMousePos = point;
     m_isRotating = true;
@@ -1304,4 +1633,32 @@ void CGLView::UpdateProjection() {
     m_aspect = (m_clientHeight != 0)
         ? static_cast<float>(m_clientWidth) / static_cast<float>(m_clientHeight) : 1.0f;
     m_projMatrix = Mat4Perspective(kCameraFovRadians, m_aspect, kCameraNearPlane, kCameraFarPlane);
+}
+
+void CGLView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags) {
+    // 선택된 객체가 없으면 편집 키를 해석하지 않는다.
+    if (m_pickedRecordIndex < 0) {
+        CWnd::OnKeyDown(nChar, nRepCnt, nFlags);
+        return;
+    }
+
+    // shift를 같이 누르면 10배로 크게
+    const bool fast = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const float move_step = kKeyMoveStepMeters * (fast ? kKeyFastMultiplier : 1.0f);
+    const float rotate_step = kKeyRotateStepRadians * (fast ? kKeyFastMultiplier : 1.0f);
+    const float scale_step = fast ? kKeyScaleFastStep : kKeyScaleStep;
+
+    switch (nChar) {
+    case 'W': TranslateSelectedRecord(0.0f, -move_step); break;   
+    case 'S': TranslateSelectedRecord(0.0f, move_step); break;   
+    case 'A': TranslateSelectedRecord(-move_step, 0.0f); break;   
+    case 'D': TranslateSelectedRecord(move_step, 0.0f); break;   
+    case 'Q': RotateSelectedRecord(rotate_step); break;          
+    case 'E': RotateSelectedRecord(-rotate_step); break;
+    case 'F': ScaleSelectedRecord(scale_step); break;
+    case 'G': ScaleSelectedRecord(1.0f / scale_step); break;
+    default:
+        CWnd::OnKeyDown(nChar, nRepCnt, nFlags);
+        return;
+    }
 }

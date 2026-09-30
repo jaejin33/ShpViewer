@@ -349,3 +349,42 @@ void CShpViewerView::SetShowTriangulationLines(bool show) {
 void CShpViewerView::SetShowPickRay(bool show) {
 	m_glView.SetShowPickRay(show);
 }
+
+void CShpViewerView::AdjustSelectedRecordHeight(float delta) {
+	m_glView.AdjustSelectedRecordHeight(delta);
+}
+
+void CShpViewerView::UpdateSelection(const CInspectorWnd::SelectionInfo& info) {
+	m_inspector.UpdateSelection(info);
+}
+
+void CShpViewerView::SetSelectedRecordHeight(float height) {
+	m_glView.SetSelectedRecordHeight(height);
+}
+
+void CShpViewerView::ResetSelectedRecordHeight() {
+	m_glView.ResetSelectedRecordHeight();
+}
+
+void CShpViewerView::ToggleSelectedRecordHidden() {
+	m_glView.ToggleSelectedRecordHidden();
+}
+
+void CShpViewerView::RestoreAllRecords() {
+	m_glView.RestoreAllRecords();
+}
+
+void CShpViewerView::TranslateSelectedRecord(float dx, float dz) {
+	m_glView.TranslateSelectedRecord(dx, dz);
+}
+
+void CShpViewerView::ResetSelectedRecordEdit() {
+	m_glView.ResetSelectedRecordEdit();
+}
+
+void CShpViewerView::RotateSelectedRecord(float delta_radians) {
+	m_glView.RotateSelectedRecord(delta_radians);
+}
+void CShpViewerView::ScaleSelectedRecord(float factor) {
+	m_glView.ScaleSelectedRecord(factor);
+}
